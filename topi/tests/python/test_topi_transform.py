@@ -629,16 +629,40 @@ def test_sequence_mask():
                     A = tvm.placeholder(shape=in_shape, dtype="float32", name="A")
                     B = tvm.placeholder(shape=(batch_size,), dtype="int32", name="B")
                     C = topi.sequence_mask(A, B, use_seq_length=use_seq_length, axis=axis, value=pad_val)
-                    A_data = np.random.normal(0, 1, in_shape)
+                    A_data = np.random.normal(0, 1, in_shape).astype(np.float32)
                     B_data = np.random.randint(1, max_length, (batch_size,))
                     if use_seq_length:
-                        expand_shape = [1 for _ in range(len(in_shape))]
-                        expand_shape[axis] = in_shape[1 - axis]
-                        mask = np.full(shape=in_shape, fill_value=max_length) >= B_data.reshape(expand_shape)
+                        val_len_expand_shape = [1 for _ in range(len(in_shape))]
+                        val_len_expand_shape[1 - axis] = in_shape[1 - axis]
+                        seq_len_expand_shape = [1 for _ in range(len(in_shape))]
+                        seq_len_expand_shape[axis] = in_shape[axis]
+                        mask = np.broadcast_to(np.arange(max_length).reshape(seq_len_expand_shape), in_shape) >=\
+                               B_data.reshape(val_len_expand_shape)
                         C_gt_data = A_data * (1 - mask) + pad_val * mask
                     else:
                         C_gt_data = A_data
-                    print(C_gt_data)
+
+                    def check_device(device):
+                        ctx = tvm.context(device, 0)
+                        if not ctx.exist:
+                            print("Skip because %s is not enabled" % device)
+                            return
+                        tvm_A = tvm.nd.array(A_data, ctx)
+                        tvm_B = tvm.nd.array(B_data, ctx)
+                        tvm_C = tvm.nd.empty(in_shape, ctx=ctx, dtype="float32")
+                        print("Running on target: %s" % device)
+                        with tvm.target.create(device):
+                            s = topi.generic.schedule_injective(C)
+                        if use_seq_length:
+                            f = tvm.build(s, [A, B, C], device, name="SequenceMask")
+                            f(tvm_A, tvm_B, tvm_C)
+                        else:
+                            f = tvm.build(s, [A, C], device, name="SequenceMask")
+                            f(tvm_A, tvm_C)
+                        tvm.testing.assert_allclose(tvm_C.asnumpy(), C_gt_data)
+                    for backend in get_all_backend():
+                        check_device(backend)
+
 if __name__ == "__main__":
     test_strided_slice()
     test_concatenate()
