@@ -488,6 +488,6 @@ def sequence_mask(data, seq_length=None, use_seq_length=False, value=0, axis=0, 
     def _compute(*indices):
         tid = indices[axis]
         bid = indices[1 - axis]
-        ret = value if tid >= seq_length(bid) else data(*indices)
+        ret = tvm.if_then_else(tid >= seq_length(bid), value, data(*indices))
         return ret
     return tvm.compute(data.shape, _compute, name=name)
