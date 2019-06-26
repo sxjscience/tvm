@@ -339,7 +339,7 @@ TVM_REGISTER_GLOBAL("topi.take")
 
 TVM_REGISTER_GLOBAL("topi.sequence_mask")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
-  float pad_val = args[2];
+  double pad_val = args[2];
   int axis = args[3];
   *rv = sequence_mask(args[0], args[1], pad_val, axis);
 });

@@ -670,7 +670,7 @@ inline Tensor take(const Tensor& a,
 */
 inline Tensor sequence_mask(const Tensor& data,
                             const Tensor& valid_length,
-                            float pad_val,
+                            double pad_val,
                             int axis,
                             std::string name = "T_sequence_mask",
                             std::string tag = kInjective) {
