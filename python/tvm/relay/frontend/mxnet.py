@@ -1007,7 +1007,7 @@ _convert_map = {
     "Embedding"     : _mx_embedding,
     "argsort"       : _mx_argsort,
     "topk"          : _mx_topk,
-    "SequeneMask"   : _mx_SequenceMask,
+    "SequenceMask"  : _mx_SequenceMask,
     "SoftmaxOutput" : _mx_softmax_output,
     "SoftmaxActivation" : _mx_softmax_activation,
     "LinearRegressionOutput" : _mx_linear_regression_output,
