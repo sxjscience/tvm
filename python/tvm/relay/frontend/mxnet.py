@@ -712,14 +712,10 @@ def _mx_topk(inputs, attrs):
 def _mx_SequenceMask(inputs, attrs):
     assert len(inputs) == 1 or len(inputs) == 2
     new_attrs = {}
-    if inputs == 2:
-        new_attrs['sequence_length'] = inputs[1]
-    else:
-        new_attrs['sequence_length'] = attrs.get('sequence_length', None)
     new_attrs['use_sequence_length'] = attrs.get_bool('use_sequence_length', False)
     new_attrs['value'] = attrs.get_float('value', 0.0)
     new_attrs['axis'] = attrs.get_int('axis', 0)
-    return _op.sequence_mask(inputs[0], **new_attrs)
+    return _op.sequence_mask(*inputs, **new_attrs)
 
 
 def _mx_rnn_param_concat(inputs, _):
