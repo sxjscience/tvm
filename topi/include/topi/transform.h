@@ -657,6 +657,38 @@ inline Tensor take(const Tensor& a,
   }
 }
 
+
+/*!
+* \brief Mask the out-of-boundary elements of each sequence.
+*
+* \param data The source array.
+* \param valid_length The indices of the values to extract.
+* \param pad_val The mode of the operation.
+* \param axis The name of the operation.
+*
+* \return A Tensor whose op member is the sequence_mask operation
+*/
+inline Tensor sequence_mask(const Tensor& data,
+                            const Tensor& valid_length,
+                            float pad_val,
+                            int axis,
+                            std::string name = "T_sequence_mask",
+                            std::string tag = kInjective) {
+  CHECK(axis == 0 || axis == 1) << "axis must be either 0 or 1";
+  CHECK_EQ(valid_length->shape.size(), 1) << "valid_length must have ndim=1, i.e., (batch_size,).";
+  auto length_dim = data->shape[axis];
+  auto batch_dim = data->shape[axis];
+  Array<Expr> out_shape = data->shape;
+  return compute(
+      out_shape, [&](const Array<Var>& out_index) {
+        Array<Expr> v_len_index;
+        auto tid = out_index[axis];
+        auto bid = out_index[1 - axis];
+        v_len_index.push_back(bid);
+        return tvm::if_then_else(tid >= valid_length(v_len_index), pad_val, data(out_index));
+      }, name, tag);
+}
+
 /*!
 * \brief Take elements from an array along an axis.
 *
