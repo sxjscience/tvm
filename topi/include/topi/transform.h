@@ -685,7 +685,8 @@ inline Tensor sequence_mask(const Tensor& data,
         auto tid = out_index[axis];
         auto bid = out_index[1 - axis];
         v_len_index.push_back(bid);
-        Expr ret = tvm::if_then_else(tid >= valid_length(v_len_index), pad_val, data(out_index));
+        Expr ret = tvm::if_then_else(tid >= valid_length(v_len_index),
+                                     Expr(pad_val), data(out_index));
         return ret;
       }, name, tag);
   return out;
