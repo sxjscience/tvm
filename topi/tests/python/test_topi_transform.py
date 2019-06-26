@@ -660,7 +660,7 @@ def test_sequence_mask():
                             f = tvm.build(s, [A, C], device, name="SequenceMask")
                             f(tvm_A, tvm_C)
                         tvm.testing.assert_allclose(tvm_C.asnumpy(), C_gt_data)
-                    for backend in ['llvm', 'cuda']:#get_all_backend():
+                    for backend in get_all_backend():
                         check_device(backend)
 
 if __name__ == "__main__":
