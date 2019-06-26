@@ -666,6 +666,45 @@ def test_forward_topk():
     verify((3, 5, 6), k=2, axis=1, ret_type="value", is_ascend=True)
     verify((3, 5, 6), k=0, axis=2, ret_type="both", dtype="int32")
 
+def test_forward_sequence_mask():
+    def verify(shape, use_sequence_length, value, axis):
+        data_np = np.random.uniform(size=shape).astype('float32')
+        valid_length_np = np.random.randint(1, shape[axis], dtype=np.int32)
+        if use_sequence_length:
+            ref_res = mx.nd.SequenceMask(mx.nd.array(data_np),
+                                         sequence_length=mx.nd.array(valid_length_np),
+                                         use_sequence_length=use_sequence_length,
+                                         value=value,
+                                         axis=axis)
+            mx_sym = mx.sym.SequenceMask(mx.sym.var('data'),
+                                         sequence_length=mx.sym.var('valid_length'),
+                                         value=value,
+                                         axis=axis)
+            mod, _ = relay.frontend.from_mxnet(mx_sym, {"data": shape,
+                                                        'valid_length': valid_length_np.shape})
+        else:
+            ref_res = mx.nd.SequenceMask(mx.nd.array(data_np),
+                                         use_sequence_length=use_sequence_length,
+                                         value=value,
+                                         axis=axis)
+            mx_sym = mx.sym.SequenceMask(mx.sym.var('data'),
+                                         use_sequence_length=use_sequence_length,
+                                         value=value,
+                                         axis=axis)
+            mod, _ = relay.frontend.from_mxnet(mx_sym, {"data": shape})
+        for target, ctx in ctx_list():
+            for kind in ['graph', 'debug']:
+                intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
+                if use_sequence_length:
+                    op_res = intrp.evaluate()(data_np, valid_length_np)
+                else:
+                    op_res = intrp.evaluate()(data_np)
+                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy())
+    verify((5, 10), True, 0.0, 0)
+    verify((5, 4, 3), True, 1.0, 1)
+    verify((5, 4, 3), False, 1.0, 1)
+    verify((5, 4, 3, 2), True, 1.0, 0)
+
 
 if __name__ == '__main__':
     test_forward_mlp()
