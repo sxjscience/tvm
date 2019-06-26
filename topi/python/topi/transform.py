@@ -484,7 +484,7 @@ def sequence_mask(data, seq_length=None, use_seq_length=False, value=0, axis=0, 
     assert len(data.shape) >= 2, "only support data.ndim >= 2, received data.shape = {}".format(data.shape)
     assert axis == 0 or axis == 1, "only support axis = 0, 1, received axis = {}".format(axis)
     if not use_seq_length:
-        return identity(data)
+        return tvm.compute(data.shape, lambda *i: data(*i), name='identity')
     def _compute(*indices):
         tid = indices[axis]
         bid = indices[1 - axis]

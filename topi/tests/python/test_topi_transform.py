@@ -619,6 +619,26 @@ def test_shape():
         check_device(backend)
 
 
+def test_sequence_mask():
+    for in_shape in (5, 10), (3, 4, 5, 4):
+        for axis in [0, 1]:
+            for pad_val in [0.0, 1.0]:
+                for use_seq_length in [False, True]:
+                    max_length = in_shape[axis]
+                    batch_size = in_shape[1 - axis]
+                    A = tvm.placeholder(shape=in_shape, dtype="float32", name="A")
+                    B = tvm.placeholder(shape=(batch_size,), dtype="int32", name="B")
+                    C = topi.sequence_mask(A, B, use_seq_length=use_seq_length, axis=axis, value=pad_val)
+                    A_data = np.random.normal(0, 1, in_shape)
+                    B_data = np.random.randint(1, max_length, (batch_size,))
+                    if use_seq_length:
+                        expand_shape = [1 for _ in range(len(in_shape))]
+                        expand_shape[axis] = in_shape[1 - axis]
+                        mask = np.full(shape=in_shape, fill_value=max_length) >= B_data.reshape(expand_shape)
+                        C_gt_data = A_data * (1 - mask) + pad_val * mask
+                    else:
+                        C_gt_data = A_data
+                    print(C_gt_data)
 if __name__ == "__main__":
     test_strided_slice()
     test_concatenate()
