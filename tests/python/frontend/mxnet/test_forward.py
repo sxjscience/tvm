@@ -678,6 +678,7 @@ def test_forward_sequence_mask():
                                          axis=axis)
             mx_sym = mx.sym.SequenceMask(mx.sym.var('data'),
                                          sequence_length=mx.sym.var('valid_length'),
+                                         use_sequence_length=use_sequence_length,
                                          value=value,
                                          axis=axis)
             mod, _ = relay.frontend.from_mxnet(mx_sym, {"data": shape,
