@@ -441,7 +441,7 @@ def shape(array, dtype="int32"):
 
 @tvm.tag_scope(tag=tag.INJECTIVE)
 def sequence_mask(data, seq_length=None, use_seq_length=False, value=0, axis=0,
-                  name="SequenceMask"):
+                  name="SequenceMask"):  # pylint: disable=too-many-arguments
     """Sets all elements outside the sequence to a constant value.
 
     This function takes an n-dimensional input array of the form [MAX_LENGTH, batch_size, ...] or
@@ -488,6 +488,7 @@ def sequence_mask(data, seq_length=None, use_seq_length=False, value=0, axis=0,
         "only support data.ndim >= 2, received data.shape = {}".format(data.shape)
     assert axis == 0 or axis == 1, "only support axis = 0, 1, received axis = {}".format(axis)
     if not use_seq_length:
+        # pylint: disable=unnecessary-lambda
         return tvm.compute(data.shape, lambda *i: data(*i), name='identity')
     def _compute(*indices):
         tid = indices[axis]
