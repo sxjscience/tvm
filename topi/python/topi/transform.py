@@ -438,10 +438,10 @@ def shape(array, dtype="int32"):
     """
     return cpp.shape(array, dtype)
 
-
+# pylint: disable=too-many-arguments
 @tvm.tag_scope(tag=tag.INJECTIVE)
 def sequence_mask(data, seq_length=None, use_seq_length=False, value=0, axis=0,
-                  name="SequenceMask"):  # pylint: disable=too-many-arguments
+                  name="SequenceMask"):
     """Sets all elements outside the sequence to a constant value.
 
     This function takes an n-dimensional input array of the form [MAX_LENGTH, batch_size, ...] or
@@ -497,3 +497,4 @@ def sequence_mask(data, seq_length=None, use_seq_length=False, value=0, axis=0,
                                data(*indices))
         return ret
     return tvm.compute(data.shape, _compute, name=name)
+# pylint: enable=too-many-arguments
