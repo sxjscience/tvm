@@ -627,10 +627,10 @@ def test_sequence_mask():
                     max_length = in_shape[axis]
                     batch_size = in_shape[1 - axis]
                     A = tvm.placeholder(shape=in_shape, dtype="float32", name="A")
-                    B = tvm.placeholder(shape=(batch_size,), dtype="int64", name="B")
+                    B = tvm.placeholder(shape=(batch_size,), dtype="int32", name="B")
                     C = topi.sequence_mask(A, B, use_seq_length=use_seq_length, axis=axis, value=pad_val)
                     A_data = np.random.normal(0, 1, in_shape).astype(np.float32)
-                    B_data = np.random.randint(1, max_length, (batch_size,))
+                    B_data = np.random.randint(1, max_length, (batch_size,)).astype(np.int32)
                     if use_seq_length:
                         val_len_expand_shape = [1 for _ in range(len(in_shape))]
                         val_len_expand_shape[1 - axis] = in_shape[1 - axis]
