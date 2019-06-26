@@ -679,14 +679,16 @@ inline Tensor sequence_mask(const Tensor& data,
   auto length_dim = data->shape[axis];
   auto batch_dim = data->shape[axis];
   Array<Expr> out_shape = data->shape;
-  return compute(
+  Tensor out = compute(
       out_shape, [&](const Array<Var>& out_index) {
         Array<Expr> v_len_index;
         auto tid = out_index[axis];
         auto bid = out_index[1 - axis];
         v_len_index.push_back(bid);
-        return tvm::if_then_else(tid >= valid_length(v_len_index), pad_val, data(out_index));
+        Expr ret = tvm::if_then_else(tid >= valid_length(v_len_index), pad_val, data(out_index));
+        return ret;
       }, name, tag);
+  return out;
 }
 
 /*!
