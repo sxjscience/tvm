@@ -623,21 +623,22 @@ def test_sequence_mask():
     for in_shape in (5, 10), (3, 4, 5, 4):
         for axis in [0, 1]:
             for pad_val in [0.0, 1.0]:
-                for use_seq_length in [False, True]:
+                for use_sequence_length in [False, True]:
                     max_length = in_shape[axis]
                     batch_size = in_shape[1 - axis]
                     A = tvm.placeholder(shape=in_shape, dtype="float32", name="A")
                     B = tvm.placeholder(shape=(batch_size,), dtype="int32", name="B")
-                    C = topi.sequence_mask(A, B, use_seq_length=use_seq_length, axis=axis, value=pad_val)
+                    C = topi.sequence_mask(A, B, use_sequence_length=use_sequence_length, axis=axis,
+                                           value=pad_val)
                     A_data = np.random.normal(0, 1, in_shape).astype(np.float32)
                     B_data = np.random.randint(1, max_length, (batch_size,)).astype(np.int32)
-                    if use_seq_length:
+                    if use_sequence_length:
                         val_len_expand_shape = [1 for _ in range(len(in_shape))]
                         val_len_expand_shape[1 - axis] = in_shape[1 - axis]
                         seq_len_expand_shape = [1 for _ in range(len(in_shape))]
                         seq_len_expand_shape[axis] = in_shape[axis]
-                        mask = np.broadcast_to(np.arange(max_length).reshape(seq_len_expand_shape), in_shape) >=\
-                               B_data.reshape(val_len_expand_shape)
+                        mask = np.broadcast_to(np.arange(max_length).reshape(seq_len_expand_shape),
+                                               in_shape) >= B_data.reshape(val_len_expand_shape)
                         C_gt_data = A_data * (1 - mask) + pad_val * mask
                     else:
                         C_gt_data = A_data
@@ -653,7 +654,7 @@ def test_sequence_mask():
                         print("Running on target: %s" % device)
                         with tvm.target.create(device):
                             s = topi.generic.schedule_injective(C)
-                        if use_seq_length:
+                        if use_sequence_length:
                             f = tvm.build(s, [A, B, C], device, name="SequenceMask")
                             f(tvm_A, tvm_B, tvm_C)
                         else:
@@ -681,3 +682,4 @@ if __name__ == "__main__":
     test_repeat()
     test_tile()
     test_shape()
+    test_sequence_mask()
