@@ -21,8 +21,6 @@ import tvm
 import topi
 from . import cpp
 from . import tag
-from .math import identity
-from .util import get_const_tuple
 
 
 def expand_dims(a, axis, num_newaxis=1):
