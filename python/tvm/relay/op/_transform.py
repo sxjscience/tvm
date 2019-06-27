@@ -60,7 +60,7 @@ _reg.register_pattern("layout_transform", OpPattern.INJECTIVE)
 # register sequence_mask
 _reg.register_schedule("sequence_mask", schedule_injective)
 
-@reg.register_compute("sequence_mask")
+@_reg.register_compute("sequence_mask")
 def compute_sequence_mask(attrs, inputs, _, target):
     """Compute definition of sequence_mask"""
     axis = get_const_int(attrs.axis)
@@ -69,4 +69,4 @@ def compute_sequence_mask(attrs, inputs, _, target):
         topi.sequence_mask(inputs[0], inputs[1], pad_val, axis)
     ]
 
-_reg.register_pattern("sequence_mask", OpPattern.INJECTIVE)
+_freg.register_pattern("sequence_mask", OpPattern.INJECTIVE)
