@@ -17,8 +17,6 @@
 """Backend compiler related feature registration"""
 # pylint: disable=invalid-name,unused-argument
 from __future__ import absolute_import
-import topi
-from topi.util import get_const_int, get_const_float
 from . import op as _reg
 from ._reduce import _schedule_reduce
 from .op import OpPattern
