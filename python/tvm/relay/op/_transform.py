@@ -17,6 +17,8 @@
 """Backend compiler related feature registration"""
 # pylint: disable=invalid-name,unused-argument
 from __future__ import absolute_import
+import topi
+from topi.util import get_const_int, get_const_float
 from . import op as _reg
 from ._reduce import _schedule_reduce
 from .op import schedule_injective, OpPattern
@@ -54,3 +56,17 @@ _reg.register_schedule("gather_nd", schedule_injective)
 # layout_transform
 _reg.register_schedule("layout_transform", schedule_injective)
 _reg.register_pattern("layout_transform", OpPattern.INJECTIVE)
+
+# register sequence_mask
+_reg.register_schedule("sequence_mask", schedule_injective)
+
+@reg.register_compute("sequence_mask")
+def compute_sequence_mask(attrs, inputs, _, target):
+    """Compute definition of sequence_mask"""
+    axis = get_const_int(attrs.axis)
+    pad_val = get_const_float(attrs.pad_val)
+    return [
+        topi.sequence_mask(inputs[0], inputs[1], pad_val, axis)
+    ]
+
+_reg.register_pattern("sequence_mask", OpPattern.INJECTIVE)
