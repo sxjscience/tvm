@@ -259,7 +259,7 @@ def test_sequence_mask():
         assert relay.ir_pass.infer_type(out).checked_type == relay.ty.TensorType(data_shape, dtype)
         func = relay.Function([data, valid_length], out)
         data_np = np.random.uniform(size=data_shape).astype(dtype)
-        valid_length_np = np.random.randint(1, max_length, size=nbatch).astype(itype)
+        valid_length_np = np.random.randint(0, max_length, size=nbatch).astype(itype)
         gt_out_np = topi.testing.sequence_mask(data_np, valid_length_np, mask_value, axis)
 
         for target, ctx in ctx_list():
@@ -269,7 +269,7 @@ def test_sequence_mask():
                 tvm.testing.assert_allclose(out_relay.asnumpy(), gt_out_np)
     _verify((5, 10), 0.0, 1, 'float32', 'int32')
     _verify((2, 3, 5, 3), 0.0, 0, 'float32', 'int64')
-    _verify((5, 8, 3), 0.1, 1, 'float64', 'int32')
+    _verify((5, 8, 3), 0.1, 1, 'float64', 'float32')
 
 if __name__ == "__main__":
     test_adaptive_pool2d()

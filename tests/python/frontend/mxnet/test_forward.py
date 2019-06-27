@@ -669,10 +669,10 @@ def test_forward_topk():
 def test_forward_sequence_mask():
     def verify(shape, use_sequence_length, value, axis):
         data_np = np.random.uniform(size=shape).astype('float32')
-        valid_length_np = np.random.randint(1, shape[axis], size=shape[1-axis], dtype=np.int32)
+        valid_length_np = np.random.randint(0, shape[axis], size=shape[1-axis]).astype('float32')
         if use_sequence_length:
-            ref_res = mx.nd.SequenceMask(mx.nd.array(data_np),
-                                         sequence_length=mx.nd.array(valid_length_np),
+            ref_res = mx.nd.SequenceMask(mx.nd.array(data_np, dtype=np.float32),
+                                         sequence_length=mx.nd.array(valid_length_np, dtype=np.float32),
                                          use_sequence_length=use_sequence_length,
                                          value=value,
                                          axis=axis)
@@ -684,7 +684,7 @@ def test_forward_sequence_mask():
             mod, _ = relay.frontend.from_mxnet(mx_sym, {"data": shape,
                                                         'valid_length': valid_length_np.shape})
         else:
-            ref_res = mx.nd.SequenceMask(mx.nd.array(data_np),
+            ref_res = mx.nd.SequenceMask(mx.nd.array(data_np, dtype=np.float32),
                                          use_sequence_length=use_sequence_length,
                                          value=value,
                                          axis=axis)
