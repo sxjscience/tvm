@@ -622,12 +622,12 @@ def test_shape():
 def test_sequence_mask():
     for in_shape in (5, 10), (3, 4, 5, 4):
         for axis in [0, 1]:
-            for pad_val in [0.0, 1.0]:
+            for mask_value in [0.0, 1.0]:
                 max_length = in_shape[axis]
                 batch_size = in_shape[1 - axis]
                 A = tvm.placeholder(shape=in_shape, dtype="float32", name="A")
                 B = tvm.placeholder(shape=(batch_size,), dtype="int32", name="B")
-                C = topi.sequence_mask(A, B, axis=axis, pad_val=pad_val)
+                C = topi.sequence_mask(A, B, axis=axis, mask_value=mask_value)
                 A_data = np.random.normal(0, 1, in_shape).astype(np.float32)
                 B_data = np.random.randint(1, max_length, (batch_size,)).astype(np.int32)
                 val_len_expand_shape = [1 for _ in range(len(in_shape))]
@@ -636,7 +636,7 @@ def test_sequence_mask():
                 seq_len_expand_shape[axis] = in_shape[axis]
                 mask = np.broadcast_to(np.arange(max_length).reshape(seq_len_expand_shape),
                                        in_shape) >= B_data.reshape(val_len_expand_shape)
-                C_gt_data = A_data * (1 - mask) + pad_val * mask
+                C_gt_data = A_data * (1 - mask) + mask_value * mask
 
                 def check_device(device):
                     ctx = tvm.context(device, 0)
