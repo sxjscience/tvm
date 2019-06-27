@@ -69,4 +69,4 @@ def compute_sequence_mask(attrs, inputs, _, target):
         topi.sequence_mask(inputs[0], inputs[1], pad_val, axis)
     ]
 
-_freg.register_pattern("sequence_mask", OpPattern.INJECTIVE)
+_reg.register_pattern("sequence_mask", OpPattern.INJECTIVE)
