@@ -227,3 +227,5 @@ conda/pkg
 
 .envrc
 *.nix
+
+cmake-build-debug
