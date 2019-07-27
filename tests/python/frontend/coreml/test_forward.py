@@ -48,7 +48,7 @@ def run_model_checkonly(model_file, model_name='', input_name='image'):
     shape_dict = {input_name : x.shape}
     mod, params = relay.frontend.from_coreml(model, shape_dict)
     for target, ctx in ctx_list():
-        tvm_output = get_tvm_output(mod[mod.entry_func], x, params, target, ctx)
+        tvm_output = get_tvm_output(mod["main"], x, params, target, ctx)
         print(target, ctx, model_name, 'prediction id: ', np.argmax(tvm_output.flat))
 
 def test_mobilenet_checkonly():
@@ -73,7 +73,7 @@ def run_tvm_graph(coreml_model, target, ctx, input_data, input_name, output_shap
 
     mod, params = relay.frontend.from_coreml(coreml_model, shape_dict)
     with relay.transform.build_config(opt_level=3):
-        graph, lib, params = relay.build(mod[mod.entry_func], target, params=params)
+        graph, lib, params = relay.build(mod, target, params=params)
 
     from tvm.contrib import graph_runtime
     m = graph_runtime.create(graph, lib, ctx)

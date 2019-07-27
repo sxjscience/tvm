@@ -114,6 +114,7 @@ This level enables additional math and transform operators.
    tvm.relay.full
    tvm.relay.full_like
    tvm.relay.cast
+   tvm.relay.reinterpret
    tvm.relay.split
    tvm.relay.arange
    tvm.relay.stack
@@ -186,10 +187,12 @@ This level support backpropagation of broadcast operators. It is temporary.
    tvm.relay.collapse_sum_like
    tvm.relay.slice_like
    tvm.relay.shape_of
+   tvm.relay.contrib.ndarray_size
    tvm.relay.layout_transform
    tvm.relay.device_copy
    tvm.relay.annotation.on_device
    tvm.relay.reverse_reshape
+   tvm.relay.sequence_mask
    tvm.relay.nn.batch_matmul
    tvm.relay.contrib.adaptive_max_pool2d
    tvm.relay.contrib.adaptive_avg_pool2d
@@ -261,6 +264,7 @@ Level 3 Definitions
 .. autofunction:: tvm.relay.full
 .. autofunction:: tvm.relay.full_like
 .. autofunction:: tvm.relay.cast
+.. autofunction:: tvm.relay.reinterpret
 .. autofunction:: tvm.relay.split
 .. autofunction:: tvm.relay.arange
 .. autofunction:: tvm.relay.stack
@@ -319,10 +323,12 @@ Level 10 Definitions
 .. autofunction:: tvm.relay.collapse_sum_like
 .. autofunction:: tvm.relay.slice_like
 .. autofunction:: tvm.relay.shape_of
+.. autofunction:: tvm.relay.contrib.ndarray_size
 .. autofunction:: tvm.relay.layout_transform
 .. autofunction:: tvm.relay.device_copy
 .. autofunction:: tvm.relay.annotation.on_device
 .. autofunction:: tvm.relay.reverse_reshape
+.. autofunction:: tvm.relay.sequence_mask
 .. autofunction:: tvm.relay.nn.batch_matmul
 .. autofunction:: tvm.relay.contrib.adaptive_max_pool2d
 .. autofunction:: tvm.relay.contrib.adaptive_avg_pool2d

@@ -26,14 +26,15 @@ def test_eta_expand_basic():
     with _transform.PassContext(opt_level=3):
         mod = seq(mod)
 
-    got = mod[mod.entry_func.name_hint]
+    got = mod["main"]
 
     y = relay.var('y', 'int32')
     expected = relay.Function([y], orig(y))
-
-    got = relay.ir_pass.infer_type(got, mod)
-    expected = relay.ir_pass.infer_type(expected, mod)
-    assert(relay.ir_pass.alpha_equal(got, expected))
+    gv = relay.GlobalVar("gv")
+    mod[gv] = expected
+    mod = _transform.InferType()(mod)
+    expected = mod["gv"]
+    assert(relay.analysis.alpha_equal(got, expected))
 
 if __name__ == "__main__":
     test_eta_expand_basic()

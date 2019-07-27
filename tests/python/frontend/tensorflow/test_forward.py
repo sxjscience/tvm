@@ -64,7 +64,7 @@ def run_tvm_graph(graph_def, input_data, input_node, num_output=1,
                                                  shape=shape_dict,
                                                  outputs=out_names)
     with relay.build_config(opt_level=opt_level):
-        graph, lib, params = relay.build(mod[mod.entry_func], target, target_host, params)
+        graph, lib, params = relay.build(mod, target, target_host, params)
 
     ctx = tvm.context(target, 0)
     from tvm.contrib import graph_runtime
@@ -223,7 +223,7 @@ def test_forward_pooling():
 # Convolution
 # -----------
 
-def _test_convolution(tensor_in_sizes, filter_in_sizes,
+def _test_convolution(opname, tensor_in_sizes, filter_in_sizes,
                       dilations, strides, padding, data_format):
     """ One iteration of convolution with given shapes and attributes """
 
@@ -244,27 +244,84 @@ def _test_convolution(tensor_in_sizes, filter_in_sizes,
             strides = [1, 1] + strides
             dilations = [1, 1] + dilations
 
-        nn_ops.conv2d(in_data,
-                      in_filter,
-                      strides=strides,
-                      dilations=dilations,
-                      padding=padding,
-                      data_format=data_format)
+        if opname == 'conv':
+            nn_ops.conv2d(in_data,
+                          in_filter,
+                          strides=strides,
+                          dilations=dilations,
+                          padding=padding,
+                          data_format=data_format)
 
-        compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
-                            'Placeholder:0', 'Conv2D:0')
+            compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
+                                'Placeholder:0', 'Conv2D:0')
+        else:
+            nn_ops.depthwise_conv2d_native(in_data,
+                          in_filter,
+                          strides=strides,
+                          dilations=dilations,
+                          padding=padding,
+                          data_format=data_format)
+
+            compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
+                                'Placeholder:0', 'DepthwiseConv2dNative:0')
 
 def test_forward_convolution():
     if is_gpu_available():
-        _test_convolution([4, 176, 8, 8], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME', 'NCHW')
-        _test_convolution([4, 19, 17, 17], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID', 'NCHW')
-        _test_convolution([4, 124, 17, 17], [1, 1, 124, 19], [1, 1], [1, 1], 'SAME', 'NCHW')
-        _test_convolution([4, 12, 17, 17], [3, 3, 12, 32], [1, 1], [2, 2], 'VALID', 'NCHW')
+        _test_convolution('conv', [4, 176, 8, 8], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME', 'NCHW')
+        _test_convolution('conv', [4, 19, 17, 17], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID', 'NCHW')
+        _test_convolution('conv', [4, 124, 17, 17], [1, 1, 124, 19], [1, 1], [1, 1], 'SAME', 'NCHW')
+        _test_convolution('conv', [4, 12, 17, 17], [3, 3, 12, 32], [1, 1], [2, 2], 'VALID', 'NCHW')
+        _test_convolution('depthwise', [4, 176, 8, 8], [1, 1, 176, 1], [1, 1], [1, 1], 'SAME', 'NCHW')
+        _test_convolution('depthwise', [4, 19, 17, 17], [3, 3, 19, 1], [1, 1], [2, 2], 'VALID', 'NCHW')
+        _test_convolution('depthwise', [4, 124, 17, 17], [1, 1, 124, 1], [1, 1], [1, 1], 'SAME', 'NCHW')
+        _test_convolution('depthwise', [4, 12, 17, 17], [3, 3, 12, 1], [1, 1], [2, 2], 'VALID', 'NCHW')
 
-    _test_convolution([4, 8, 8, 176], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME', 'NHWC')
-    _test_convolution([4, 17, 17, 19], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID', 'NHWC')
-    _test_convolution([4, 17, 17, 124], [1, 1, 124, 19], [1, 1], [1, 1], 'SAME', 'NHWC')
-    _test_convolution([4, 17, 17, 12], [3, 3, 12, 32], [1, 1], [2, 2], 'VALID', 'NHWC')
+    _test_convolution('conv', [4, 8, 8, 176], [1, 1, 176, 32], [1, 1], [1, 1], 'SAME', 'NHWC')
+    _test_convolution('conv', [4, 17, 17, 19], [3, 3, 19, 19], [1, 1], [2, 2], 'VALID', 'NHWC')
+    _test_convolution('conv', [4, 17, 17, 124], [1, 1, 124, 19], [1, 1], [1, 1], 'SAME', 'NHWC')
+    _test_convolution('conv', [4, 17, 17, 12], [3, 3, 12, 32], [1, 1], [2, 2], 'VALID', 'NHWC')
+    _test_convolution('depthwise', [4, 8, 8, 176], [1, 1, 176, 1], [1, 1], [1, 1], 'SAME', 'NHWC')
+    _test_convolution('depthwise', [4, 17, 17, 19], [3, 3, 19, 1], [1, 1], [2, 2], 'VALID', 'NHWC')
+    _test_convolution('depthwise', [4, 17, 17, 124], [1, 1, 124, 1], [1, 1], [1, 1], 'SAME', 'NHWC')
+    _test_convolution('depthwise', [4, 17, 17, 12], [3, 3, 12, 1], [1, 1], [2, 2], 'VALID', 'NHWC')
+
+#######################################################################
+# BiasAdd
+# -----------
+def _test_biasadd(tensor_in_sizes, data_format):
+    """ One iteration of biasadd with given shapes and attributes """
+
+    total_size_1 = 1
+    for s in tensor_in_sizes:
+        total_size_1 *= s
+    tensor_bias_sizes = [tensor_in_sizes[1]] if data_format == 'NCHW' else [tensor_in_sizes[3]]
+    total_size_2 = tensor_bias_sizes[0]
+    # Initializes the input tensor with array containing incrementing
+    # numbers from 1.
+    data_array = [f * 1.0 for f in range(1, total_size_1 + 1)]
+    bias_array = [f * 1.0 for f in range(1, total_size_2 + 1)]
+
+    with tf.Graph().as_default():
+        in_data = array_ops.placeholder(shape=tensor_in_sizes, dtype='float32')
+        in_bias = constant_op.constant(bias_array, shape=tensor_bias_sizes, dtype='float32')
+        nn_ops.bias_add(in_data,
+                        in_bias,
+                        data_format=data_format)
+
+        compare_tf_with_tvm(np.reshape(data_array, tensor_in_sizes).astype('float32'),
+                            'Placeholder:0', 'BiasAdd:0')
+
+def test_forward_biasadd():
+    if is_gpu_available():
+        _test_biasadd([4, 176, 8, 8], 'NCHW')
+        _test_biasadd([1, 100, 1, 1], 'NCHW')
+        _test_biasadd([4, 19, 17, 17], 'NCHW')
+        _test_biasadd([4, 124, 3, 3], 'NCHW')
+
+    _test_biasadd([4, 8, 8, 176], 'NHWC')
+    _test_biasadd([1, 1, 1, 100], 'NHWC')
+    _test_biasadd([4, 17, 17, 19], 'NHWC')
+    _test_biasadd([4, 3, 3, 124], 'NHWC')
 
 #######################################################################
 # SpaceToBatchND
@@ -565,8 +622,8 @@ def test_forward_variable():
 
 
 #######################################################################
-# MatMul
-# ------
+# MatMul, BatchMatMul, BatchMatMulV2
+# ----------------------------------
 
 def _test_matmul(i, j, k, dtype, outer=None):
     """ One iteration of matmul """
@@ -590,10 +647,28 @@ def _test_matmul(i, j, k, dtype, outer=None):
                 compare_tf_with_tvm([A_np, B_np], [A.name, B.name], result.name)
 
 def test_forward_matmul():
-    """ Matmul op test"""
+    """ MatMul op test"""
     _test_matmul(1, 3, 6, 'int32')
     _test_matmul(5, 3, 1, 'float64')
-    # TODO non-empty outer requires BatchMatMul (BatchMatMulV2 for some cases?) support
+
+def _test_batch_matmul(A_shape, B_shape, dtype, adjoint_a=False, adjoint_b=False):
+
+    with tf.Graph().as_default():
+        A = tf.placeholder(shape=A_shape, dtype=dtype, name='A')
+        B = tf.placeholder(shape=B_shape, dtype=dtype, name='B')
+        result = tf.matmul(A, B, adjoint_a=adjoint_a,
+                           adjoint_b=adjoint_b, name='batchmatmul')
+
+        A_np = np.random.uniform(high=5.0, size=A_shape).astype(dtype)
+        B_np = np.random.uniform(high=5.0, size=B_shape).astype(dtype)
+        compare_tf_with_tvm([A_np, B_np], [A.name, B.name], result.name)
+
+def test_forward_batch_matmul():
+    """ TF op BatchMatMul, BatchMatMulV2 test"""
+    _test_batch_matmul((3, 5, 4), (3, 4, 5), 'int32')
+    _test_batch_matmul((3, 5, 4), (3, 4, 5), 'float32', True, True)
+    _test_batch_matmul((3, 5, 4), (3, 5, 4), 'int32', True, False)
+    _test_batch_matmul((3, 5, 4), (3, 5, 4), 'float32', False, True)
 
 
 #######################################################################
@@ -779,9 +854,10 @@ def _test_split(in_shape, axis, num_or_size_splits, dtype):
     in_data = tf.placeholder(dtype, in_shape, name="in_data")
     num_split = len(num_or_size_splits) if isinstance(num_or_size_splits, list)\
                 else num_or_size_splits
-    tf.split(in_data, num_or_size_splits, axis=axis)
+    split = tf.split(in_data, num_or_size_splits, axis=axis)
+    relu = [tf.nn.relu(i) for i in split]
 
-    compare_tf_with_tvm([np_data], ['in_data:0'], [f'split:{n}' for n in range(num_split)])
+    compare_tf_with_tvm([np_data], ['in_data:0'], [n.name for n in relu])
 
     # and now test together with concat
     tf.reset_default_graph()
@@ -1183,7 +1259,7 @@ def _test_lstm_cell(batch_size, num_hidden, num_layers, forget_bias, dtype):
 
 def test_forward_lstm():
     '''test LSTM block cell'''
-    _test_lstm_cell(1, 2, 1, 0.0, 'float32')
+    _test_lstm_cell(1, 2, 1, 0.5, 'float32')
 
 
 
@@ -1487,7 +1563,7 @@ def test_forward_ptb():
                       'Model/RNN/RNN/multi_rnn_cell/cell_0/lstm_cell/LSTMBlockCell_h':'float32'}
         target = 'llvm'
         with relay.build_config(opt_level=0):
-            graph, lib, params = relay.build(mod[mod.entry_func],
+            graph, lib, params = relay.build(mod,
                                              target,
                                              params=params)
         from tvm.contrib import graph_runtime
@@ -1877,6 +1953,22 @@ def test_forward_mean():
     check_mean((10, 8, 16, 32), axis=(1, 2), keepdims=True)
 
 #######################################################################
+# Size
+# ----
+def test_forward_size():
+    def check_size(ishape):
+        np_input = np.random.uniform(size=ishape).astype(np.float32)
+        with tf.Graph().as_default():
+            input = tf.placeholder(shape=np_input.shape, dtype=np_input.dtype, name='input')
+            tf.size(input, name='size')
+            compare_tf_with_tvm([np_input], ['input:0'], 'size:0')
+
+    if tf.__version__ < LooseVersion('1.1'):
+        check_size((10, 8, 16, 32))
+        check_size((10,))
+        check_size(())
+
+#######################################################################
 # All, Max, Min
 # -------------
 def test_forward_reduce_all():
@@ -2030,6 +2122,7 @@ if __name__ == '__main__':
     test_forward_depthtospace()
     test_forward_squeeze()
     test_forward_pack()
+    test_forward_size()
     test_forward_broadcast_to()
     test_forward_fill()
     test_forward_crop()
@@ -2122,6 +2215,7 @@ if __name__ == '__main__':
     test_forward_rel_ops()
     test_forward_logical()
     test_forward_where()
-
     test_forward_matmul()
-    # TODO missing tests: rank, range
+    test_forward_batch_matmul()
+
+    # TODO missing tests: rank

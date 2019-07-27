@@ -20,7 +20,7 @@ from __future__ import absolute_import as _abs
 import math
 import numpy as np
 import tvm
-from .. import ir_pass
+from .. import analysis
 from .. import expr as _expr
 from .. import module as _module
 from .. import op as _op
@@ -79,7 +79,9 @@ class OperatorConverter(object):
             'REDUCE_PROD': self._convert_reduce_prod,
             'FULLY_CONNECTED': self.convert_fully_connected,
             'PAD': self.convert_pad,
+            'PACK': self.convert_pack,
             'LOGISTIC': self.convert_logistic,
+            'SPLIT': self.convert_split
         }
 
     def check_unsupported_ops(self):
@@ -704,6 +706,43 @@ class OperatorConverter(object):
 
         return out
 
+    def convert_split(self, op):
+        """split implementation."""
+        try:
+            from tflite.BuiltinOptions import BuiltinOptions
+            from tflite.Operator import Operator
+            from tflite.SplitOptions import SplitOptions
+        except ImportError:
+            raise ImportError("The tflite package must be installed")
+
+        assert isinstance(op, Operator)
+        input_tensors = self.get_input_tensors(op)
+
+        assert len(input_tensors) == 2, "input tensors length should be == 2"
+
+        axis_tensor = input_tensors[0]
+        split_axis = self.get_tensor_value(axis_tensor)
+        input_tensor = input_tensors[1]
+        input_tensor_idx = input_tensor.tensor_idx
+
+        assert op.BuiltinOptionsType() == BuiltinOptions.SplitOptions
+        op_options = op.BuiltinOptions()
+        split_options = SplitOptions()
+        split_options.Init(op_options.Bytes, op_options.Pos)
+        num_splits = split_options.NumSplits()
+
+        in_expr = self.get_expr(input_tensor_idx)
+        out = _op.split(in_expr, num_splits, axis=int(split_axis))
+        # Relay does not like a TupleWrapper of 1 element, further this
+        # only shows up with tf1.13 if we use a split with num_splits==1.
+        # In tf 1.14 this doesn't appear as it is automatically a reshape
+        # operation.
+        if isinstance(out, _expr.TupleWrapper):
+            if out.size == 1:
+                out = out[0]
+
+        return out
+
     def convert_pool2d(self, op, pool_type):
         """pool2d implementation."""
         try:
@@ -787,6 +826,33 @@ class OperatorConverter(object):
 
         # Use default pad_value 0 because TFLite does not support constant_values parameter
         out = _op.nn.pad(in_expr, paddings)
+        return out
+
+    def convert_pack(self, op):
+        """Convert TFLite pack"""
+        try:
+            from tflite.BuiltinOptions import BuiltinOptions
+            from tflite.Operator import Operator
+            from tflite.PackOptions import PackOptions
+        except ImportError:
+            raise ImportError("The tflite package must be installed")
+
+        assert isinstance(op, Operator)
+        input_tensors = self.get_input_tensors(op)
+        assert len(input_tensors) >= 1, "input tensors should greater than 1"
+        in_exprs = [self.get_expr(input_tensor.tensor_idx) for input_tensor in input_tensors]
+
+        output_tensors = self.get_output_tensors(op)
+        assert len(output_tensors) == 1, "output tensors should be 1"
+
+        assert op.BuiltinOptionsType() == BuiltinOptions.PackOptions
+        op_options = op.BuiltinOptions()
+        pack_options = PackOptions()
+        pack_options.Init(op_options.Bytes, op_options.Pos)
+        pack_axis = pack_options.Axis()
+
+        in_exprs_reshaped = [_op.expand_dims(i, axis=pack_axis, num_newaxis=1) for i in in_exprs]
+        out = _op.concatenate(in_exprs_reshaped, pack_axis)
         return out
 
     def get_expr(self, input_tensor_idx):
@@ -914,5 +980,5 @@ def from_tflite(model, shape_dict, dtype_dict):
     params = {k:_nd.array(np.array(v)) for k, v in exp_tab.params.items()}
     outputs = [exp_tab.get_expr(get_tensor_name(subgraph, i)) for i in model_outputs]
     outputs = outputs[0] if len(outputs) == 1 else _expr.Tuple(outputs)
-    func = _expr.Function(ir_pass.free_vars(outputs), outputs)
+    func = _expr.Function(analysis.free_vars(outputs), outputs)
     return _module.Module.from_expr(func), params

@@ -27,7 +27,8 @@ import numpy as np
 
 import tvm
 from topi.util import get_const_tuple
-from .. import ir_pass
+from .. import analysis
+from .. import transform as _transform
 from .. import expr as _expr
 from .. import op as _op
 from ..expr_functor import ExprMutator
@@ -38,9 +39,9 @@ __all__ = ['from_tensorflow']
 def _infer_value(input_val, params):
     from tvm.contrib import graph_runtime
     # Check that all free variables have associated parameters.
-    assert all(var.name_hint in params.keys() for var in ir_pass.free_vars(
+    assert all(var.name_hint in params.keys() for var in analysis.free_vars(
         input_val)), "All inputs to infer must be available in params."
-    func = _expr.Function(ir_pass.free_vars(input_val), input_val)
+    func = _expr.Function(analysis.free_vars(input_val), input_val)
     with tvm.relay.build_config(opt_level=0):
         graph, lib, params = tvm.relay.build(func, target="llvm", params=params)
     ctx = tvm.context("llvm", 0)
@@ -50,18 +51,16 @@ def _infer_value(input_val, params):
     return m.get_output(0)
 
 def _get_relay_op(op_name):
-    try:
-        op = getattr(_op, op_name)
-    except AttributeError:
+    ops = [_op, _op.nn, _op.image, _op.vision]
+    for operator in ops:
         try:
-            op = getattr(_op.nn, op_name)
+            op = getattr(operator, op_name)
+            return op
         except AttributeError:
-            op = getattr(_op.image, op_name)
+            continue
 
-    if not op:
-        raise tvm.error.OpNotImplemented(
-            'Operator {} is not supported for frontend TensorFlow.'.format(op_name))
-    return op
+    raise tvm.error.OpNotImplemented(
+        'Operator {} is not supported for frontend TensorFlow.'.format(op_name))
 
 class AttrCvt(object):
     """Common attribute converter. An AttrConverter instance is a callable:
@@ -235,9 +234,16 @@ def _infer_out_shapes(inputs, params):
     """A method to get the output shape of intermediate nodes in the relay graph."""
     return [_infer_shape(inputs, params)]
 
+def _infer_type(node):
+    """A method to infer the type of an intermediate node in the relay graph."""
+    mod = _module.Module.from_expr(node)
+    mod = _transform.InferType()(mod)
+    entry = mod["main"]
+    return entry if isinstance(node, _expr.Function) else entry.body
+
 def _infer_shape(node, params=None):
     """A method to get the output shape of an intermediate node in the relay graph."""
-    out_type = ir_pass.infer_type(node)
+    out_type = _infer_type(node)
     return get_const_tuple(out_type.checked_type.shape)
 
 def _get_param(params, input_node):
@@ -353,8 +359,12 @@ def _conv(opname):
         # NCHW Layout require weights transpose
         if attr['data_format'] == 'NCHW':
             tmp_shape = attr['_input_shapes'][inputs[1]]
-            tmp_shape = [tmp_shape[ii] for ii in (3, 2, 0, 1)]
-            inputs[1] = _op.transpose(inputs[1], axes=(3, 2, 0, 1))
+            if opname == 'conv':
+                tmp_shape = [tmp_shape[ii] for ii in (3, 2, 0, 1)]
+                inputs[1] = _op.transpose(inputs[1], axes=(3, 2, 0, 1))
+            else:
+                tmp_shape = [tmp_shape[ii] for ii in (2, 3, 0, 1)]
+                inputs[1] = _op.transpose(inputs[1], axes=(2, 3, 0, 1))
             attr['_input_shapes'][inputs[1]] = tmp_shape
 
         input_shape = attr['_input_shapes'][inputs[0]]
@@ -386,12 +396,12 @@ def _conv(opname):
                 attr['dilations'] = (attr['dilations'][1], attr['dilations'][2])
             attr['strides'] = (attr['strides'][1], attr['strides'][2])
         elif attr['data_format'] == 'NCHW':
-            depth_mult, _, kernel_h, kernel_w = weights_shape
+            _, depth_mult, kernel_h, kernel_w = weights_shape
             attr['kernel_shape'] = (weights_shape[2], weights_shape[3])
             if opname == 'conv':
                 attr['channels'] = weights_shape[0]
             else:
-                attr['channels'] = input_shape[0] * depth_mult
+                attr['channels'] = input_shape[1] * depth_mult
                 if attr['channels'] < 0:
                     attr['channels'] *= -1
 
@@ -403,8 +413,10 @@ def _conv(opname):
                   'not valid.'
             raise tvm.error.OpAttributeInvalid(msg.format(attr['data_format']))
 
-
         if opname == 'depthwise':
+            if depth_mult > 1:
+                raise tvm.error.OpNotImplemented('depth_mult > 1 of operator DepthwiseConv2dNative'
+                                                 ' is not supported.')
             attr['groups'] = attr['channels']
 
         # Fix padding
@@ -595,6 +607,16 @@ def _matmul():
                        extras={'units': channels},
                        ignores=['transpose_a', 'transpose_b', 'T'])(inputs, attr)
 
+    return _impl
+
+def _batch_matmul():
+    def _impl(inputs, attr, params):
+        adj_x = attr['adj_x']
+        adj_y = attr['adj_y']
+        input_x = _op.transpose(inputs[0], axes=[0, 2, 1]) if adj_x else inputs[0]
+        input_y = _op.transpose(inputs[1], axes=[0, 2, 1]) if not adj_y else inputs[1]
+        ret = _get_relay_op('batch_matmul')(input_x, input_y)
+        return ret
     return _impl
 
 def _undef():
@@ -809,7 +831,7 @@ def _fill():
         output_shape = attr['_output_shapes'][0]
         # Output shape must be defined to avoid errors. If any axis is not, we must
         # try to compute its shape.
-        if -1 in output_shape:
+        if output_shape is None or -1 in output_shape:
             output_shape = _infer_value(inputs[0], params).asnumpy().reshape([-1]).tolist()
 
         fill_arg = _get_num_param(params, inputs.pop(1))
@@ -1051,9 +1073,9 @@ def _range():
         return AttrCvt(
             op_name="arange",
             ignores=['Tidx'],
-            extras={'start': start,
-                    "stop": limit,
-                    'step': delta,
+            extras={'start': _expr.const(start),
+                    "stop": _expr.const(limit),
+                    'step': _expr.const(delta),
                     'dtype': dtype})([], attr)
     return _impl
 
@@ -1261,8 +1283,8 @@ def _batch_to_space_nd():
             crop = crops[axis - 1]
             if crop != [0, 0]:
                 indices = tvm.relay.arange(
-                    crop[0],
-                    reshaped_permuted_shape[axis] - crop[1],
+                    _expr.const(crop[0]),
+                    _expr.const(reshaped_permuted_shape[axis] - crop[1]),
                     dtype='int32'
                 )
                 cropped = tvm.relay.take(cropped, indices=indices, axis=axis)
@@ -1295,6 +1317,8 @@ _convert_map = {
     'ArgMax'                            : _argx(_op.argmax, 'argmax'),
     'ArgMin'                            : _argx(_op.argmin, 'argmin'),
     'AvgPool'                           : _pooling('avg_pool'),
+    'BatchMatMul'                       : _batch_matmul(),
+    'BatchMatMulV2'                     : _batch_matmul(),
     'BatchNormWithGlobalNormalization'  : _batch_norm(),
     'BatchToSpaceND'                    : _batch_to_space_nd(),
     'BiasAdd'                           : _bias_add(),
@@ -1369,6 +1393,7 @@ _convert_map = {
     'Shape'                             : _shape(),
     'Sigmoid'                           : AttrCvt('sigmoid'),
     'Sign'                              : AttrCvt('sign'),
+    'Size'                              : AttrCvt('ndarray_size'),
     'Slice'                             : _slice(),
     'Softmax'                           : _softmax(),
     'Softplus'                          : _softplus(),
@@ -1437,9 +1462,8 @@ def _LSTMBlockCell():
         gate_list = _op.split(gates_bias, indices_or_sections=4, axis=1)
         in_gate = _op.sigmoid(gate_list[0])
         in_transform = _op.tanh(gate_list[1])
-        forget_gate = _op.sigmoid(gate_list[2])
-        forget_gate = _op.add(forget_gate,
-                              tvm.relay.const(forget_bias, attr['T'].name))
+        forget_gate = _op.add(gate_list[2], tvm.relay.const(forget_bias, attr['T'].name))
+        forget_gate = _op.sigmoid(forget_gate)
         out_gate = _op.sigmoid(gate_list[3])
         next_c = _op.add(_op.multiply(forget_gate, in_state_c),
                          _op.multiply(in_gate, in_transform))
@@ -1842,7 +1866,8 @@ class Loop:
         bind_map = {}
         for i, var in enumerate(self.loop_vars):
             if not isinstance(var, _expr.Var):
-                var_type = ir_pass.infer_type(var).checked_type
+                var_chk = _infer_type(var)
+                var_type = var_chk.checked_type
             else:
                 var_type = var.type_annotation
 
@@ -2016,15 +2041,6 @@ class GraphProto(object):
                 # Pass the target layout
                 attr["_target_layout"] = layout
 
-                #ToDo: Some of the tensorflow operators internaly maintain
-                #execution layers and its output name will the layer number along with
-                #graph node name.eg: Node name:- 'Model/RNN/cell_0/RnnCell', but the
-                #output name will be 'Model/RNN/cell_0/RnnCell:0'. In this case,
-                #the digit has to be ignored.
-                if ":" in node.input[0]:
-                    in_name, _ = node.input[0].split(':')
-                    node.input[0] = in_name
-
                 # Fill shapes for all inputs in a list
                 inputs = []
                 for i in node.input:
@@ -2113,8 +2129,8 @@ class GraphProto(object):
                 out.append(out_rnn)
 
         out = out[0] if len(out) == 1 else _expr.Tuple(out)
-        func = _expr.Function(ir_pass.free_vars(out), out)
-        self._mod[self._mod.entry_func] = func
+        func = _expr.Function(analysis.free_vars(out), out)
+        self._mod["main"] = func
         return self._mod, self._params
 
     def _parse_import_prerequisites(self, graph):
@@ -2330,7 +2346,8 @@ class GraphProto(object):
             else:
                 if node_name_prefix not in self._branches:
                     self._branches[node_name_prefix] = Branch()
-                self._branches[node_name_prefix].cond = ir_pass.infer_type(op[0])
+                chk_op = _infer_type(op[0])
+                self._branches[node_name_prefix].cond = chk_op
         elif node.op == "NextIteration":
             op = self._nodes[node.input[0]]
             assert len(op) == 1

@@ -248,6 +248,30 @@ class Sequential(Pass):
                                             passes, opt_level, name, required)
 
 
+def infer_type(expr, mod=None):
+    """Infer the type of an expr.
+    Adding Function into a Module will change it's binding,
+    and some passes need type inference to work without binding modification.
+    However, InferType() work by putting stuff into a Module, thus changing all the binding.
+
+    This is an escape patch that allow type inference without binding changing.
+
+    Parameters
+    ----------
+    expr : tvm.relay.Expr
+        The input expression.
+
+    mod : Optional[tvm.relay.Module]
+        The input module
+
+    Returns
+    -------
+    ret : tvm.relay.Expr
+        The output expression.
+    """
+    return _transform.infer_type(expr, mod)
+
+
 def InferType():
     """Infer the type of an expr.
 
@@ -277,6 +301,40 @@ def FoldScaleAxis():
     return _transform.FoldScaleAxis()
 
 
+def BackwardFoldScaleAxis():
+    """Backward fold axis scaling into weights of conv2d/dense.
+
+    Returns
+    -------
+    ret : tvm.relay.Pass
+        The registered pass to backward fold expressions.
+
+    Note
+    ----
+    It is recommended to call backward_fold_scale_axis
+    before using forward_fold_scale_axis.
+    As backward folding targets common conv-bn pattern.
+    """
+    return _transform.BackwardFoldScaleAxis()
+
+
+def ForwardFoldScaleAxis():
+    """Fold the scaling of axis into weights of conv2d/dense.
+
+    Returns
+    -------
+    ret : tvm.relay.Pass
+        The registered pass to forward fold expressions.
+
+    Note
+    ----
+    It is recommended to call backward_fold_scale_axis
+    before using forward_fold_scale_axis.
+    As backward folding targets common conv-bn pattern.
+    """
+    return _transform.ForwardFoldScaleAxis()
+
+
 def SimplifyInference():
     """Simplify the data-flow graph for inference phase. An simplified expression
     which is semantically equal to the input expression will be returned.
@@ -302,15 +360,20 @@ def CanonicalizeOps():
     return _transform.CanonicalizeOps()
 
 
-def DeadCodeElimination():
-    """ Remove expressions which does not effect the program result (dead code).
+def DeadCodeElimination(inline_once=False):
+    """Remove expressions which does not effect the program result (dead code).
+
+    Parameters
+    ----------
+    inline_once: Optional[Bool]
+        Whether to inline binding that occurs only once.
 
     Returns
     -------
     ret: tvm.relay.Pass
         The registered pass that eliminates the dead code in a Relay program.
     """
-    return _transform.DeadCodeElimination()
+    return _transform.DeadCodeElimination(inline_once)
 
 
 def FoldConstant():
@@ -401,10 +464,25 @@ def ToANormalForm():
 
     Returns
     -------
-    ret: tvm.relay.Pass
+    ret: Union[tvm.relay.Pass, tvm.relay.Expr]
         The registered pass that transforms an expression into A Normal Form.
     """
     return _transform.ToANormalForm()
+
+
+def ToCPS(expr, mod=None):
+    """
+    Turn expression into continuation passing style(CPS).
+
+    Every intermediate compute will be passed to a continuation.
+
+    Returns
+    -------
+    result: tvm.relay.Pass
+        The registered pass that transforms an expression into CPS.
+    """
+    return _transform.to_cps(expr, mod)
+
 
 def EtaExpand():
     """Add abstraction over a function
@@ -415,6 +493,7 @@ def EtaExpand():
         The registered pass that eta expands an expression.
     """
     return _transform.EtaExpand()
+
 
 def ToGraphNormalForm():
     """Turn A Normal Form expression into Graph Normal Form expression
@@ -447,12 +526,20 @@ def EliminateCommonSubexpr(fskip=None):
 def PartialEvaluate():
     """Evaluate the static fragment of the code.
 
+    Note
+    ----
+    This transformation could be either `Module -> Module` or `Expr -> Expr`.
+    It will directly transform the input expression to a new one if the target
+    expression is provided. Otherwise, it will rely on the pass manager to
+    carry out transformation.
+
     Returns
     -------
-    ret : tvm.relay.Pass
+    ret: tvm.relay.Pass
         The registered pass that performs partial evaluation on an expression.
     """
     return _transform.PartialEvaluate()
+
 
 def CanonicalizeCast():
     """
@@ -464,6 +551,104 @@ def CanonicalizeCast():
         The registered pass that canonicalizes cast expression.
     """
     return _transform.CanonicalizeCast()
+
+
+def LambdaLift():
+    """
+    Lift the closure to global function.
+
+    Returns
+    -------
+    ret : tvm.relay.Pass
+        The registered pass that lifts the lambda function.
+    """
+    return _transform.LambdaLift()
+
+
+def PrintIR():
+    """
+    Print the IR for a module to help debugging.
+
+    Returns
+    -------
+    ret : tvm.relay.Pass
+        The registered pass that prints the module IR.
+    """
+    return _transform.PrintIR()
+
+
+def gradient(expr, mod=None, mode='higher_order'):
+    """
+    Transform the input function,
+    returning a function that calculate the original result,
+    paired with gradient of the input.
+
+    Parameters
+    ----------
+    expr : tvm.relay.Expr
+        The input expression, which is a Function or a GlobalVar.
+
+    mod : Optional[tvm.relay.Module]
+
+    mode : Optional[String]
+        The mode of the automatic differentiation algorithm.
+        'first_order' only works on first order code, but will not produce
+        reference nor closure.
+        'higher_order' works on all code using reference and closure.
+
+    Returns
+    -------
+    expr : tvm.relay.Expr
+      The transformed expression.
+    """
+    if mode == 'first_order':
+        return _transform.first_order_gradient(expr, mod)
+    if mode == 'higher_order':
+        return _transform.gradient(expr, mod)
+    raise Exception('unknown mode')
+
+
+def to_cps(func, mod=None):
+    """
+    Turn expression into CPS expression.
+
+    Every intermediate compute will be passed to a continuation.
+
+    Parameters
+    ----------
+    func: tvm.relay.Function
+        The input function.
+
+    mod: Optional[tvm.relay.Module]
+        The global module.
+
+    Returns
+    -------
+    result: tvm.relay.Function
+      The output function.
+    """
+    return _transform.to_cps(func, mod)
+
+
+def un_cps(func):
+    """
+    Turn an cps function into a Function without the continuation argument.
+
+    Note that this will not give the exact same interface as before cps:
+      If the input/output is higher order, they will still be in cps form.
+
+    Parameters
+    ----------
+    func: tvm.relay.Function
+        The input function
+
+    Returns
+    -------
+    result: tvm.relay.Function
+        The output function
+    """
+    return _transform.un_cps(func)
+
 
 def _wrap_class_module_pass(pass_cls, pass_info):
     """Wrap a python class as function pass"""

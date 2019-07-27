@@ -21,9 +21,16 @@ import tvm
 from tvm import relay
 from tvm.relay import ExprFunctor
 from tvm.relay import Function, Call
-from tvm.relay import ir_pass
+from tvm.relay import analysis
 from tvm.relay import transform as _transform
 from tvm.relay.testing import ctx_list
+
+
+def run_infer_type(expr):
+    mod = relay.Module.from_expr(expr)
+    mod = _transform.InferType()(mod)
+    entry = mod["main"]
+    return entry if isinstance(expr, relay.Function) else entry.body
 
 
 def get_var_func():
@@ -107,9 +114,9 @@ def get_rand(shape, dtype='float32'):
 
 
 def check_func(func, ref_func):
-    func = ir_pass.infer_type(func)
-    ref_func = ir_pass.infer_type(ref_func)
-    assert ir_pass.graph_equal(func, ref_func)
+    func = run_infer_type(func)
+    ref_func = run_infer_type(ref_func)
+    assert analysis.graph_equal(func, ref_func)
 
 
 def test_module_pass():
@@ -493,8 +500,64 @@ def test_sequential_with_scoping():
             mod = seq(mod)
 
     zz = mod["main"]
-    zexpected = ir_pass.infer_type(expected())
-    assert relay.ir_pass.alpha_equal(zz, zexpected)
+    zexpected = run_infer_type(expected())
+    assert analysis.alpha_equal(zz, zexpected)
+
+
+def test_print_ir():
+    shape = (1, 2, 3)
+    tp = relay.TensorType(shape, "float32")
+    x = relay.var("x", tp)
+    y = relay.add(x, x)
+    y = relay.multiply(y, relay.const(2, "float32"))
+    func = relay.Function([x], y)
+
+    seq = _transform.Sequential([
+        relay.transform.InferType(),
+        relay.transform.FoldConstant(),
+        relay.transform.PrintIR(),
+        relay.transform.DeadCodeElimination()
+    ])
+
+    def redirect_output(call):
+        """Redirect the C++ logging info."""
+        import sys
+        import os
+        import threading
+        stderr_fileno = sys.stderr.fileno()
+        stderr_save = os.dup(stderr_fileno)
+        stderr_pipe = os.pipe()
+        os.dup2(stderr_pipe[1], stderr_fileno)
+        os.close(stderr_pipe[1])
+        output = ''
+
+        def record():
+            nonlocal output
+            while True:
+                data = os.read(stderr_pipe[0], 1024)
+                if not data:
+                    break
+                output += data.decode("utf-8")
+
+        t = threading.Thread(target=record)
+        t.start()
+        call()
+        os.close(stderr_fileno)
+        t.join()
+        os.close(stderr_pipe[0])
+        os.dup2(stderr_save, stderr_fileno)
+        os.close(stderr_save)
+
+        return output
+
+    def run_pass():
+        mod = relay.Module({"main": func})
+        with relay.build_config(opt_level=3):
+            mod = seq(mod)
+
+    out = redirect_output(run_pass)
+    assert "Dumping the module IR" in out
+    assert "multiply" in out
 
 
 if __name__ == "__main__":
@@ -505,3 +568,4 @@ if __name__ == "__main__":
     test_sequential_pass()
     test_sequential_with_scoping()
     test_pass_info()
+    test_print_ir()

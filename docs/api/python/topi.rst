@@ -40,6 +40,7 @@ List of operators
    topi.sigmoid
    topi.clip
    topi.cast
+   topi.reinterpret
    topi.transpose
    topi.flip
    topi.strided_slice
@@ -97,10 +98,12 @@ List of operators
    topi.repeat
    topi.tile
    topi.shape
+   topi.ndarray_size
    topi.layout_transform
    topi.image.resize
    topi.argsort
    topi.topk
+   topi.sequence_mask
 
 
 List of schedules
@@ -131,6 +134,7 @@ topi
 .. autofunction:: topi.sigmoid
 .. autofunction:: topi.clip
 .. autofunction:: topi.cast
+.. autofunction:: topi.reinterpret
 .. autofunction:: topi.transpose
 .. autofunction:: topi.flip
 .. autofunction:: topi.strided_slice
@@ -164,9 +168,11 @@ topi
 .. autofunction:: topi.repeat
 .. autofunction:: topi.tile
 .. autofunction:: topi.shape
+.. autofunction:: topi.ndarray_size
 .. autofunction:: topi.layout_transform
 .. autofunction:: topi.argsort
 .. autofunction:: topi.topk
+.. autofunction:: topi.sequence_mask
 
 topi.nn
 ~~~~~~~

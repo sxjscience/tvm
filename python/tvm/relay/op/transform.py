@@ -17,7 +17,7 @@
 """Transform operators."""
 
 from . import _make
-from ..expr import TupleWrapper
+from ..expr import TupleWrapper, const
 
 
 def cast(data, dtype):
@@ -38,6 +38,26 @@ def cast(data, dtype):
     """
     from .. import _make as _relay_make
     return _relay_make.cast(data, dtype)
+
+
+def reinterpret(data, dtype):
+    """Reinterpret input tensor to data type.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input data to the operator.
+
+    dtype: str
+        The target data type
+
+    Returns
+    -------
+    result : relay.Expr
+        The reinterpreted result.
+    """
+    from .. import _make as _relay_make
+    return _relay_make.reinterpret(data, dtype)
 
 
 def expand_dims(data, axis, num_newaxis=1):
@@ -272,7 +292,7 @@ def full_like(data, fill_value):
     return _make.full_like(data, fill_value)
 
 
-def arange(start, stop=None, step=1, dtype="float32"):
+def arange(start, stop=None, step=None, dtype="float32"):
     """Return evenly spaced values within a given interval.
 
     .. note::
@@ -310,9 +330,13 @@ def arange(start, stop=None, step=1, dtype="float32"):
         relay.arange(1, 5) = [1, 2, 3, 4]
         relay.arange(1, 5, 1.5) = [1, 2.5, 4]
     """
+    if step is None:
+        step = const(1, dtype)
+
     if stop is None:
         stop = start
-        start = 0
+        start = const(0, dtype=dtype)
+
     return _make.arange(start, stop, step, dtype)
 
 
