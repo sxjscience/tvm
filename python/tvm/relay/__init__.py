@@ -34,6 +34,8 @@ from . import debug
 from . import param_dict
 from . import feature
 from .backend import vm
+from .backend import serializer
+from .backend import deserializer
 from .backend import vmobj
 
 # Root operators
@@ -50,6 +52,9 @@ from . import image
 from . import frontend
 from . import backend
 from . import quantize
+
+# Dialects
+from . import qnn
 
 from .scope_builder import ScopeBuilder
 

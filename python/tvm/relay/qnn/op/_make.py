@@ -1,4 +1,3 @@
-#!/bin/bash
 # Licensed to the Apache Software Foundation (ASF) under one
 # or more contributor license agreements.  See the NOTICE file
 # distributed with this work for additional information
@@ -15,9 +14,7 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
-PROJROOT="$( cd "$( dirname "${BASH_SOURCE[0]}" )/../../" && pwd )"
+"""Constructor APIs"""
+from ...._ffi.function import _init_api
 
-
-export PYTHONPATH=${PYTHONPATH}:${PROJROOT}/python:${PROJROOT}/vta/python
-export PYTHONPATH=${PYTHONPATH}:/home/xilinx/pynq
-python3 -m vta.exec.rpc_server --tracker fleet:9190 --key pynq
+_init_api("relay.qnn.op._make", __name__)
