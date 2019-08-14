@@ -3,5 +3,7 @@ if [ ! -d "./build" ]; then
 fi
 cd build
 rm CMakeCache.txt
-cmake -DUSE_LLVM=/usr/bin/llvm-config-6.0 -DUSE_CUDA=ON ..
+cmake -DUSE_LLVM=/usr/bin/llvm-config-6.0 -DUSE_CUDA=ON -DUSE_SORT=ON ..
 make -j `nproc --all`
+cd ..
+
