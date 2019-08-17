@@ -63,6 +63,8 @@ def compile_cuda(code,
 
     with open(temp_code, "w") as out_file:
         out_file.write(code)
+    with open('/home/ubuntu/tvm/tutorials/frontend/my_kernel.cu', 'w') as of:
+        of.write(code)
 
     if arch is None:
         if nd.gpu(0).exist:
@@ -91,7 +93,8 @@ def compile_cuda(code,
         cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
 
     (out, _) = proc.communicate()
-
+    import shutil
+    shutil.copyfile(temp_target, '/home/ubuntu/tvm/tutorials/frontend/my_kernel.{}'.format(target))
     if proc.returncode != 0:
         msg = "Compilation error:\n"
         msg += py_str(out)

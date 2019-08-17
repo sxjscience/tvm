@@ -335,6 +335,7 @@ class RelayBuildModule : public runtime::ModuleNode {
 
     // Fuse the operations if it is needed.
     relay_module = transform::FuseOps()(relay_module);
+    LOG(INFO) << AsText(relay_module, false);
     relay_module = transform::InferType()(relay_module);
 
     return relay_module;
