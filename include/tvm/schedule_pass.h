@@ -66,7 +66,7 @@ void AutoInlineElemWise(Schedule sch);
  * \brief To automatically inline operations with injective writes
  *   (i.e. writes without reduction or sequential loops). Note
  *   that in this case, guarantees about contiguity, transpose, stride,
- *   alignemnt and memory footprint in general do not hold.
+ *   alignment and memory footprint in general do not hold.
  *
  * \param sch The schedule to be inlined.
  */
