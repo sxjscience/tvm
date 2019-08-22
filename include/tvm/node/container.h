@@ -151,7 +151,7 @@ class IterAdapter {
  *  Array implements copy on write semantics, which means array is mutable
  *  but copy will happen when array is referenced in more than two places.
  *
- * operator[] only provide const acces, use Set to mutate the content.
+ * operator[] only provide const access, use Set to mutate the content.
  * \tparam T The content NodeRef type.
  */
 template<typename T,
