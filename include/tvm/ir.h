@@ -1329,6 +1329,25 @@ constexpr const char* tvm_address_of = "tvm_address_of";
  */
 constexpr const char* tvm_if_then_else = "tvm_if_then_else";
 /*!
+ * \brief See which range the idx falls into and return the specific value. Return the
+ *        default_value (last element in values) if the idx is out-of-bound.
+ *
+ *  Type tvm_range_switch(idx, uppers, values) {
+ *    if (idx < uppers[0]) {
+ *      return values[0];
+ *    } else if (idx < uppers[1]) {
+ *      return values[1];
+ *    } else if (...) {
+ *      return ...
+ *    } else if (idx < uppers[k - 1]) {
+ *      return values[k - 1];
+ *    } else {
+ *      return values[k];
+ *    }
+ *  }
+ */
+constexpr const char* tvm_range_switch = "tvm_range_switch";
+/*!
  * \brief Get head access address with memory access pattern info.
  *
  *  This operator also marks range of the memory access

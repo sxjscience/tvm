@@ -78,6 +78,109 @@ void BinaryOpMatchTypes(Expr& lhs, Expr& rhs) {  // NOLINT(*)
   }
 }
 
+// public function to check whether the expressions within the array have the same type
+// Also, broadcast the lanes of the inner expressions if possible.
+void ArrayOpMatchTypes(Array<Expr> &arr) {
+  if (arr.size() == 0) return;
+  int bcast_lanes = 1;
+  for (int i = 0; i < arr.size(); i++) {
+    int lanes = arr[i].type().lanes();
+    if (lanes != 1) {
+      if (bcast_lanes != 1 && lanes != bcast_lanes) {
+        LOG(FATAL) << "Cannot match the type of the arr. Fail at the idx="
+                   << i << ". Found lanes=" << lanes << " while the expected=" << bcast_lanes;
+      } else {
+        bcast_lanes = lanes;
+      }
+    }
+  }
+  // Broadcast the lanes of the inner expressions
+  for (int i = 0; i < arr.size(); i++) {
+    int lanes = arr[i].type().lanes();
+    if (lanes == 1) {
+      arr.Set(i, ir::Broadcast::make(arr[i], bcast_lanes));
+    }
+  }
+  // Type checking, we do not do any data type conversion
+  Type base_type = arr[0].type();
+  for (int i = 0; i < arr.size(); i++) {
+    CHECK_EQ(arr[i].type(), base_type) << "Type mismatch, "
+                                          << " arr[0].type=" << base_type
+                                          << " arr[" << i << "].type=" << arr[i].type();
+  }
+}
+
+// Function that matches the types of indices in RangeSwitch.
+// Automatically cast the inner data types to the consistent integer types.
+void MatchRangeSwitchIdxTypes(Expr &idx, Array<Expr> &uppers) {
+  CHECK_EQ(idx.type().lanes(), 1) << "Only unvectorized types are supported. idx.lanes="
+                                       << idx.type().lanes();
+  for (const auto& expr : uppers) {
+    CHECK_EQ(expr.type().lanes(), 1) << "Only unvectorized types are supported. expr.lanes="
+                                          << expr.type().lanes();
+  }
+  // Distinguish
+  bool all_integer_dtype = true;
+  all_integer_dtype = all_integer_dtype && (idx.type().is_int() || idx.type().is_uint());
+  for (const auto& expr : uppers) {
+    if (all_integer_dtype) {
+      all_integer_dtype = all_integer_dtype && (expr.type().is_int() || expr.type().is_uint());
+    } else {
+      break;
+    }
+  }
+  // Try to automatically cast the types of idx and uppers to the same data type if they have the
+  // integer types
+  if (all_integer_dtype) {
+    bool use_int = idx.type().is_int();
+    int max_bits = idx.type().bits();
+    Type dtype = idx.type();
+    for (int i = 0; i < uppers.size(); i++) {
+      const Type& ele_type = uppers[i].type();
+      CHECK((ele_type.is_int() || ele_type.is_uint())
+            && ele_type.lanes() == 1) << "Only Integer unvectorized type is supported."
+                                      << " uppers[" << i << "].type = " << ele_type;
+      use_int = (use_int || ele_type.is_int());
+      max_bits = std::max(max_bits, ele_type.bits());
+    }
+    if (use_int) {
+      dtype = Int(max_bits, 1);
+    } else {
+      dtype = UInt(max_bits, 1);
+    }
+    idx = SimpleCast(dtype, idx);
+    for (int i = 0; i < uppers.size(); i++) {
+      if (uppers[i].type() != dtype) {
+        uppers.Set(i, SimpleCast(dtype, uppers[i]));
+      }
+    }
+  }
+}
+
+// Function that returns the index of the range that the idx falls into.
+// returns -1 if not found and returns uppers.size() if idx is larger than all the ranges.
+template<typename T>
+int EagerEvaluateRangeSwitch(const Expr& idx, const Array<Expr>& uppers) {
+  bool cannot_eager_eval = false;
+  const T* op = idx.as<T>();
+  CHECK(op != nullptr) << "Type mismatch, the given idx cannot be casted to the specified type.";
+  auto idx_val = op->value;
+  for (int i = 0; i < uppers.size(); i++) {
+    if (const T* upper_op = uppers[i].as<T>()) {
+      if (idx_val < upper_op->value) {
+        return i;
+      }
+    } else {
+      cannot_eager_eval = true;
+      break;
+    }
+  }
+  if (!cannot_eager_eval) {
+    return uppers.size();
+  } else {
+    return -1;
+  }
+}
 
 template<typename ValueType>
 inline bool ConstPowerHelper(ValueType val, int *shift) {
@@ -238,7 +341,7 @@ Expr if_then_else(Expr cond, Expr true_value, Expr false_value) {
   using ir::IntImm;
   using ir::UIntImm;
   CHECK(cond.type() == Bool(1))
-      << "if_then_else only accept a single condition";
+      << "if_then_else only accept the condition to be boolean type.";
   BinaryOpMatchTypes(true_value, false_value);
   if (const UIntImm* op = cond.as<UIntImm>()) {
     if (op->value != 0) {
@@ -258,6 +361,45 @@ Expr if_then_else(Expr cond, Expr true_value, Expr false_value) {
       ir::intrinsic::tvm_if_then_else,
       {cond, true_value, false_value},
       ir::Call::PureIntrinsic);
+}
+
+Expr range_switch(Expr idx, Array<Expr> uppers, Array<Expr> values) {
+  using ir::IntImm;
+  using ir::UIntImm;
+  CHECK_EQ(uppers.size() + 1, values.size())
+    << "The number of range upper bounds needs to be the same as the number of expressions."
+    << "uppers.size() = " << uppers.size() <<" values.size() = " << values.size();
+  CHECK_GT(values.size(), 0) << "The values array cannot be empty.";
+  if (uppers.empty()) {
+    return values[values.size() - 1];
+  }
+  ArrayOpMatchTypes(values);
+  // Try to derive the results if the idx has int types and the value falls inside the range
+  // determined by uppers.
+  MatchRangeSwitchIdxTypes(idx, uppers);
+  int eager_sel = -1;
+  if (idx.get()->is_type<IntImm>()) {
+    eager_sel = EagerEvaluateRangeSwitch<IntImm>(idx, uppers);
+  } else if (idx.get()->is_type<UIntImm>()) {
+    eager_sel = EagerEvaluateRangeSwitch<UIntImm>(idx, uppers);
+  }
+  if (eager_sel >= 0) {
+    return values[eager_sel];
+  } else {
+    Array<Expr> make_args;
+    make_args.push_back(idx);
+    for (const auto& expr : uppers) {
+      make_args.push_back(expr);
+    }
+    for (const auto& expr : values) {
+      make_args.push_back(expr);
+    }
+    return ir::Call::make(
+            values[values.size() - 1].type(),
+            ir::intrinsic::tvm_range_switch,
+            make_args,
+            ir::Call::PureIntrinsic);
+  }
 }
 
 Expr likely(Expr cond) {

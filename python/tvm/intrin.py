@@ -482,12 +482,41 @@ def if_then_else(cond, t, f):
     Unlike Select, if_then_else cannot be vectorized
     if some lanes in the vector have different conditions.
     """
-    t = convert(t)
-    f = convert(f)
-    cond = convert(cond)
-    if cond.dtype != "bool":
-        raise TypeError("The condition's data type has to be bool")
-    return call_pure_intrin(t.dtype, "tvm_if_then_else", cond, t, f)
+    return _make._OpIfThenElse(cond, t, f)
+
+
+def range_switch(idx, uppers, values):
+    """Compare the index with a sequence of consecutive ranges and select the value attached to the
+    range it belongs to. Choose the default value (values[-1]) if the index is out of the boundary.
+
+    Parameters
+    ----------
+    idx : Expr
+        The input index.
+
+    uppers : list of Expr
+        The upper bounds of the regions.
+
+    values : list of Expr
+        List of expressions to choose from. Each is attached to a specific range.
+
+    Returns
+    -------
+    result : Expr
+        The result expression
+
+    Note
+    ----
+    It cannot be vectorized if some lanes in the values vector have different conditions.
+    """
+    idx = convert(idx)
+    uppers = [convert(ele) for ele in uppers]
+    values = [convert(ele) for ele in values]
+    if (len(uppers) + 1 != len(values)) or len(values) == 0:
+        raise ValueError('Array size mismatch. values must have one more element than uppers and '
+                         'cannot be empty. Received len(values)={}, len(uppers)={}'
+                         .format(len(values), len(uppers)))
+    return call_pure_intrin(values[-1].dtype, "tvm_range_switch", idx, *uppers, *values)
 
 
 # Intrinsic rule related code

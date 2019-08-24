@@ -422,6 +422,17 @@ TVM_DLL Expr operator~(Expr a);
  */
 TVM_DLL Expr if_then_else(Expr cond, Expr true_value, Expr false_value);
 /*!
+ * \brief Determine the range the input idx falls into and set the output expression.
+ *
+ * \param idx The input index.
+ * \param uppers The upper bound of the range. The idx will be compared against uppers[i].
+ * \param values The expressions we need to choose from. The last element is the default value.
+ * \return The result expression
+ * \note this function does eager constant folding for
+ *       index types(int32, int64) when possible.
+ */
+TVM_DLL Expr range_switch(Expr idx, Array<Expr> uppers, Array<Expr> values);
+/*!
  * \brief Mark condition as likely.
  * \param cond The condition
  * \return The marked expression.

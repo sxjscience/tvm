@@ -141,6 +141,15 @@ class Stage : public NodeRef {
    */
   TVM_DLL Stage& split_by_nparts(IterVar parent, Expr nparts, IterVar* p_outer, IterVar* p_inner);   // NOLINT(*)
   /*!
+   * \brief Split the iteration when the inner part contains tvm_range_switch.
+   *
+   * \param parent The parent domain.
+   * \param p_outer The result outer domain.
+   * \param p_inner The result inner domain.
+   * \return reference to self.
+   */
+  TVM_DLL Stage& split_range_switch(IterVar parent, Array<IterVar>* p_);   // NOLINT(*)
+  /*!
    * \brief Fuse the inner outer domain to the target
    * \param outer The outer domain to be fused.
    * \param inner The inner domain to be fused
