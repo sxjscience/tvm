@@ -509,14 +509,8 @@ def range_switch(idx, uppers, values):
     ----
     It cannot be vectorized if some lanes in the values vector have different conditions.
     """
-    idx = convert(idx)
-    uppers = [convert(ele) for ele in uppers]
-    values = [convert(ele) for ele in values]
-    if (len(uppers) + 1 != len(values)) or len(values) == 0:
-        raise ValueError('Array size mismatch. values must have one more element than uppers and '
-                         'cannot be empty. Received len(values)={}, len(uppers)={}'
-                         .format(len(values), len(uppers)))
-    return call_pure_intrin(values[-1].dtype, "tvm_range_switch", idx, *uppers, *values)
+    return _make._OpRangeSwitch(convert(idx), [convert(ele) for ele in uppers],
+                                [convert(ele) for ele in values])
 
 
 # Intrinsic rule related code

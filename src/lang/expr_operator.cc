@@ -85,74 +85,76 @@ void ArrayOpMatchTypes(Array<Expr> &arr) {
   int bcast_lanes = 1;
   for (int i = 0; i < arr.size(); i++) {
     int lanes = arr[i].type().lanes();
-    if (lanes != 1) {
-      if (bcast_lanes != 1 && lanes != bcast_lanes) {
+    if (lanes != 1 && bcast_lanes != 1) {
+      if(lanes != bcast_lanes) {
         LOG(FATAL) << "Cannot match the type of the arr. Fail at the idx="
                    << i << ". Found lanes=" << lanes << " while the expected=" << bcast_lanes;
-      } else {
-        bcast_lanes = lanes;
       }
+    } else {
+      bcast_lanes = std::max(lanes, bcast_lanes);
     }
   }
   // Broadcast the lanes of the inner expressions
   for (int i = 0; i < arr.size(); i++) {
     int lanes = arr[i].type().lanes();
-    if (lanes == 1) {
+    if (lanes == 1 && bcast_lanes > 1) {
       arr.Set(i, ir::Broadcast::make(arr[i], bcast_lanes));
     }
   }
-  // Type checking, we do not do any data type conversion
-  Type base_type = arr[0].type();
+  // Type checking and casting, we use the following rule to cast data types:
+  // 1. If any element in the array has float type, all other integer types will be converted to the
+  //    float type with the highest precision
+  // 2. If all elements have integer types and there exists a signed integer type, all will
+  //    be converted to the signed integer type with the maximum number of bits. Otherwise, if all
+  //    have unsigned integer types, the elements will be converted to the unsigned integer type
+  //    with the maximum number of bits.
+  bool has_float = false;
+  bool has_signed_int = false;
+  int max_float_bits = 0;
+  int max_int_bits = 0;
+  Type cast_type = arr[0].type();
   for (int i = 0; i < arr.size(); i++) {
-    CHECK_EQ(arr[i].type(), base_type) << "Type mismatch, "
-                                          << " arr[0].type=" << base_type
-                                          << " arr[" << i << "].type=" << arr[i].type();
+    const Type& ele_type = arr[i].type();
+    if (ele_type.is_float()) {
+      has_float = true;
+      max_float_bits = std::max(max_float_bits, ele_type.bits());
+    } else if (ele_type.is_int()) {
+      has_signed_int = true;
+      max_int_bits = std::max(max_int_bits, ele_type.bits());
+    } else if (ele_type.is_uint()) {
+      max_int_bits = std::max(max_int_bits, ele_type.bits());
+    } else {
+      LOG(FATAL) << "Does not support dtype. arr[" << i << "].dtype = " << ele_type;
+    }
+  }
+  if (has_float) {
+    cast_type = Float(max_float_bits, bcast_lanes);
+  } else if (has_signed_int) {
+    cast_type = Int(max_int_bits, bcast_lanes);
+  } else {
+    cast_type = UInt(max_int_bits, bcast_lanes);
+  }
+  for(int i = 0; i < arr.size(); i++) {
+    if (arr[i].type() != cast_type) {
+      arr.Set(i, SimpleCast(cast_type, arr[i]));
+    }
   }
 }
 
 // Function that matches the types of indices in RangeSwitch.
-// Automatically cast the inner data types to the consistent integer types.
+// Automatically cast the dtypes of uppers to be the same as the dtype of idx.
 void MatchRangeSwitchIdxTypes(Expr &idx, Array<Expr> &uppers) {
-  CHECK_EQ(idx.type().lanes(), 1) << "Only unvectorized types are supported. idx.lanes="
+  CHECK(idx.type().is_scalar()) << "Only scalar types are supported for idx. idx.lanes="
                                        << idx.type().lanes();
   for (const auto& expr : uppers) {
-    CHECK_EQ(expr.type().lanes(), 1) << "Only unvectorized types are supported. expr.lanes="
+    CHECK(expr.type().is_scalar()) << "Only scalar types are supported for expr. expr.lanes="
                                           << expr.type().lanes();
   }
-  // Distinguish
-  bool all_integer_dtype = true;
-  all_integer_dtype = all_integer_dtype && (idx.type().is_int() || idx.type().is_uint());
-  for (const auto& expr : uppers) {
-    if (all_integer_dtype) {
-      all_integer_dtype = all_integer_dtype && (expr.type().is_int() || expr.type().is_uint());
-    } else {
-      break;
-    }
-  }
-  // Try to automatically cast the types of idx and uppers to the same data type if they have the
-  // integer types
-  if (all_integer_dtype) {
-    bool use_int = idx.type().is_int();
-    int max_bits = idx.type().bits();
-    Type dtype = idx.type();
-    for (int i = 0; i < uppers.size(); i++) {
-      const Type& ele_type = uppers[i].type();
-      CHECK((ele_type.is_int() || ele_type.is_uint())
-            && ele_type.lanes() == 1) << "Only Integer unvectorized type is supported."
-                                      << " uppers[" << i << "].type = " << ele_type;
-      use_int = (use_int || ele_type.is_int());
-      max_bits = std::max(max_bits, ele_type.bits());
-    }
-    if (use_int) {
-      dtype = Int(max_bits, 1);
-    } else {
-      dtype = UInt(max_bits, 1);
-    }
-    idx = SimpleCast(dtype, idx);
-    for (int i = 0; i < uppers.size(); i++) {
-      if (uppers[i].type() != dtype) {
-        uppers.Set(i, SimpleCast(dtype, uppers[i]));
-      }
+  const Type& idx_type = idx.type();
+  // Cast dtypes of uppers to be the same as idx
+  for (int i = 0; i < uppers.size(); i++) {
+    if (uppers[i].type() != idx_type) {
+      uppers.Set(i, SimpleCast(idx_type, uppers[i]));
     }
   }
 }
@@ -366,6 +368,7 @@ Expr if_then_else(Expr cond, Expr true_value, Expr false_value) {
 Expr range_switch(Expr idx, Array<Expr> uppers, Array<Expr> values) {
   using ir::IntImm;
   using ir::UIntImm;
+  using ir::FloatImm;
   CHECK_EQ(uppers.size() + 1, values.size())
     << "The number of range upper bounds needs to be the same as the number of expressions."
     << "uppers.size() = " << uppers.size() <<" values.size() = " << values.size();
@@ -382,6 +385,8 @@ Expr range_switch(Expr idx, Array<Expr> uppers, Array<Expr> values) {
     eager_sel = EagerEvaluateRangeSwitch<IntImm>(idx, uppers);
   } else if (idx.get()->is_type<UIntImm>()) {
     eager_sel = EagerEvaluateRangeSwitch<UIntImm>(idx, uppers);
+  } else if (idx.get()->is_type<FloatImm>()) {
+    eager_sel = EagerEvaluateRangeSwitch<FloatImm>(idx, uppers);
   }
   if (eager_sel >= 0) {
     return values[eager_sel];
