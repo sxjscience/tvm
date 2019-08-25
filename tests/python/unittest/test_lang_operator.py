@@ -183,6 +183,37 @@ def test_if_then_else():
             raise ValueError('Unknown combinations')
 
 
+def test_range_switch():
+    # Test for type conversion
+    cases = [[1, (5, 'int32'), ('int32', 'float32', 'float16'), 'int32', 'float32', 0],
+             [10, (5, 10, 20), ('int32', 'uint32', 'int16', 'int32'), 'int32', 'int32', 2],
+             [20, (5, 10, 20), ('int32', 'uint32', 'int16', 'int32'), 'int32', 'int32', 3],
+             ['int32', ('float32',), ('float32', 'float32'), 'int32', 'float32', None],
+             ['float32', ('int32',), ('uint32', 'uint64'), 'float32', 'uint64', None]]
+    for test_case in cases:
+        idx, uppers, values, gt_idx_type, gt_value_type, gt_select = test_case
+        uppers = list(uppers)
+        values = list(values)
+        if isinstance(idx, str):
+            idx = tvm.var(dtype=idx)
+        for i in range(len(uppers)):
+            if isinstance(uppers[i], str):
+                uppers[i] = tvm.var(dtype=uppers[i])
+        for i in range(len(values)):
+            if isinstance(values[i], str):
+                values[i] = tvm.var(dtype=values[i])
+        out = tvm.range_switch(idx, uppers, values)
+        if gt_select is not None:
+            assert tvm.ir_pass.Equal(out, values[gt_select].astype(gt_value_type))
+        else:
+            assert out.args[0].dtype == gt_idx_type
+            for i in range(len(uppers) + 1):
+                assert out.args[i].dtype == gt_idx_type
+            for i in range(len(uppers) + 1, len(uppers) + 1 + len(values)):
+                assert out.args[i].dtype == gt_value_type
+            assert out.dtype == gt_value_type
+
+
 if __name__ == "__main__":
     test_const_fold()
     test_const_fold2()
@@ -190,3 +221,4 @@ if __name__ == "__main__":
     test_const_fold4()
     test_binary_dtype_match()
     test_if_then_else()
+    test_range_switch()
