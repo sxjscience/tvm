@@ -196,6 +196,7 @@ REGISTER_MAKE_BINARY_OP(_OpDiv, operator/);
 REGISTER_MAKE_BINARY_OP(_OpMod, operator%);
 REGISTER_MAKE_BINARY_OP(_OpFloorDiv, floordiv);
 REGISTER_MAKE_BINARY_OP(_OpFloorMod, floormod);
+REGISTER_MAKE_BINARY_OP(_OpPow, pow);
 REGISTER_MAKE_BINARY_OP(_OpMin, min);
 REGISTER_MAKE_BINARY_OP(_OpMax, max);
 REGISTER_MAKE_BINARY_OP(_OpEQ, operator==);
@@ -220,6 +221,5 @@ TVM_REGISTER_API("make._OpRangeSwitch")
         [] (Expr idx, Array<Expr> uppers, Array<Expr> values) {
   return range_switch(idx, uppers, values);
 });
-
 }  // namespace ir
 }  // namespace tvm
