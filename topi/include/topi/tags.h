@@ -31,6 +31,7 @@ namespace topi {
 
 constexpr auto kElementWise = "elemwise";
 constexpr auto kInjective = "injective";
+constexpr auto kConcatenate = "concatenate";
 constexpr auto kCommReduce = "comm_reduce";
 constexpr auto kCommReduceIdx = "comm_reduce_idx";
 constexpr auto kBroadcast = "broadcast";

@@ -345,6 +345,72 @@ inline Tensor concatenate(const Array<Tensor>& inputs,
     }, name, tag);
 }
 
+
+/*!
+* \brief Join a sequence of tensors along an existing axis
+*
+* \param inputs The input tensors
+* \param axis The axis along which the tensors will be joined
+* \param name The name of the operation
+* \param tag The tag to mark the operation
+*
+* \return A Tensor whose op member is the concatenate operation
+*/
+inline Tensor new_concatenate(const Array<Tensor>& inputs,
+                              int axis = 0,
+                              std::string name = "T_concat",
+                              std::string tag = kConcatenate) {
+  int ndim = static_cast<int>(inputs[0]->shape.size());
+  CHECK(-ndim <= axis && axis < ndim)
+    << "concatenate only accepts `axis` in [-ndim, ndim)"
+    << ", but got axis = " << axis
+    << ", and ndim = " << ndim;
+  if (axis < 0) {
+    axis += ndim;
+  }
+  CHECK_LT(axis, inputs[0]->shape.size()) <<
+    "axis out of bounds";
+
+  Array<Expr> axis_sizes;
+  for (auto t : inputs) {
+    axis_sizes.push_back(t->shape[axis]);
+  }
+
+  Expr join_size = axis_sizes[0];
+  for (size_t i = 1; i < axis_sizes.size(); ++i) {
+    join_size += axis_sizes[i];
+  }
+  join_size = tvm::ir::Simplify(join_size);
+  Array<Expr> out_shape;
+  for (size_t i = 0; i < inputs[0]->shape.size(); ++i) {
+    out_shape.push_back(i == static_cast<size_t>(axis) ? join_size : inputs[0]->shape[i]);
+  }
+
+  return compute(
+    out_shape, [&](const Array<Var>& indices) {
+      auto ret = inputs[0](indices);
+      auto ind = indices[axis];
+      for (size_t i = 0; i < inputs.size() - 1; ++i) {
+        ind -= axis_sizes[i];
+
+        Array<Expr> idx;
+        for (size_t i = 0; i < static_cast<size_t>(axis); ++i) {
+          idx.push_back(indices[i]);
+        }
+        idx.push_back(ind);
+        for (size_t i = axis + 1; i < indices.size(); ++i) {
+          idx.push_back(indices[i]);
+        }
+
+        ret = tvm::if_then_else(ind >= 0,
+                                inputs[i + 1](idx),
+                                ret);
+      }
+      return ret;
+    }, name, tag);
+}
+
+
 /*!
 * \brief Join a sequence of tensors along a new axis.
 *

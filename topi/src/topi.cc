@@ -317,6 +317,11 @@ TVM_REGISTER_GLOBAL("topi.concatenate")
   *rv = concatenate(args[0], args[1]);
   });
 
+TVM_REGISTER_GLOBAL("topi.new_concatenate")
+.set_body([](TVMArgs args, TVMRetValue *rv) {
+  *rv = new_concatenate(args[0], args[1]);
+  });
+
 TVM_REGISTER_GLOBAL("topi.stack")
 .set_body([](TVMArgs args, TVMRetValue *rv) {
   *rv = stack(args[0], args[1]);
