@@ -377,35 +377,27 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
   }
 
   Expr join_size = axis_sizes[0];
+  Array<Expr> uppers;
+  uppers.push_back(join_size);
   for (size_t i = 1; i < axis_sizes.size(); ++i) {
     join_size += axis_sizes[i];
+    join_size = tvm::ir::Simplify(join_size);
+    uppers.push_back(join_size);
   }
-  join_size = tvm::ir::Simplify(join_size);
   Array<Expr> out_shape;
+
   for (size_t i = 0; i < inputs[0]->shape.size(); ++i) {
     out_shape.push_back(i == static_cast<size_t>(axis) ? join_size : inputs[0]->shape[i]);
   }
 
   return compute(
     out_shape, [&](const Array<Var>& indices) {
-      auto ret = inputs[0](indices);
-      auto ind = indices[axis];
-      for (size_t i = 0; i < inputs.size() - 1; ++i) {
-        ind -= axis_sizes[i];
-
-        Array<Expr> idx;
-        for (size_t i = 0; i < static_cast<size_t>(axis); ++i) {
-          idx.push_back(indices[i]);
-        }
-        idx.push_back(ind);
-        for (size_t i = axis + 1; i < indices.size(); ++i) {
-          idx.push_back(indices[i]);
-        }
-
-        ret = tvm::if_then_else(ind >= 0,
-                                inputs[i + 1](idx),
-                                ret);
+      Array<Expr> values;
+      for (size_t i = 0; i < inputs.size(); ++i) {
+        values.push_back(inputs[i](indices));
       }
+      values.push_back(inputs[0](indices));
+      Expr ret = tvm::range_switch(indices[axis], uppers, values);
       return ret;
     }, name, tag);
 }
