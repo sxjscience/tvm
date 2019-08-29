@@ -117,7 +117,16 @@ def _convert_advanced_activation(inexpr, keras_layer, etab):
     act_type = type(keras_layer).__name__
 
     if act_type == 'Softmax':
-        return _op.nn.softmax(inexpr, axis=1)
+        axis = keras_layer.axis
+        dims = len(keras_layer.input_shape)
+        if isinstance(axis, list):
+            raise tvm.error.OpAttributeUnImplemented(
+                'Softmax with axes {} is not supported.'.format(axis))
+        if axis == -1:
+            axis = 1
+        else:
+            axis = axis + 1 if axis < dims - 1 else 1
+        return _op.nn.softmax(inexpr, axis=axis)
     if act_type == 'ReLU':
         if keras_layer.max_value:
             return _op.clip(inexpr, a_min=0., a_max=float(keras_layer.max_value))
@@ -147,7 +156,26 @@ def _convert_advanced_activation(inexpr, keras_layer, etab):
 def _convert_merge(inexpr, keras_layer, _):
     merge_type = type(keras_layer).__name__
     ret = inexpr[0]
-    if merge_type == 'Subtract':
+    if merge_type == 'Dot':
+        axes = keras_layer.axes
+        if isinstance(keras_layer.axes, int):
+            axes = [keras_layer.axes, keras_layer.axes]
+        if isinstance(axes, list):
+            if len(axes) != 2:
+                raise tvm.error.OpAttributeUnimplemented(
+                    'Dot with axes {} is not supported.'.format(keras_layer.axes))
+            for i, axis in enumerate(axes):
+                if axis not in [1, 2]:
+                    raise tvm.error.OpAttributeUnimplemented(
+                        'Dot with axes {} is not supported.'.format(keras_layer.axes))
+                if axes[i] == 2:
+                    inexpr[i] = _op.transpose(inexpr[i], axes=[0, 2, 1])
+        else:
+            raise tvm.error.OpAttributeUnImplemented(
+                'Dot with axes {} is not supported.'.format(keras_layer.axes))
+        ret_dot = _op.nn.batch_matmul(inexpr[0], inexpr[1])
+        ret = _op.transpose(ret_dot, axes=[0, 2, 1])
+    elif merge_type == 'Subtract':
         assert len(inexpr) == 2, "Subtract merge takes 2 inputs."
         ret = _op.subtract(ret, inexpr[1])
     elif merge_type in ['Add', 'Multiply', 'Maximum']:
@@ -344,7 +372,7 @@ def _convert_pooling(inexpr, keras_layer, etab):
         pad_l, pad_r = _get_pad_pair(in_w, pool_w, stride_w)
         params['padding'] = [pad_t, pad_l, pad_b, pad_r]
     else:
-        raise tvm.error.OpAttributeUnimplemented(
+        raise tvm.error.OpAttributeUnImplemented(
             'Padding with {} is not supported in operator Pooling.'.format(keras_layer.padding))
     if pool_type == 'MaxPooling2D':
         return _op.nn.max_pool2d(inexpr, **params)
@@ -626,7 +654,7 @@ _convert_map = {
 
     'Average'                : _convert_merge,
     'Maximum'                : _convert_merge,
-    # 'Dot'                    : _convert_merge,
+    'Dot'                    : _convert_merge,
     'Permute'                : _convert_permute,
     # 'Embedding'              : _convert_embedding,
     # 'RepeatVector'           : _convert_repeat_vector,
