@@ -48,15 +48,15 @@ class TensorLoad(tensorType: String = "none", debug: Boolean = false)
   val strideFactor = tp.tensorLength * tp.tensorWidth
 
   val dec = io.inst.asTypeOf(new MemDecode)
-  val dataCtrl = Module(new TensorDataCtrl(sizeFactor, strideFactor))
+  val dataCtrl = Module(new TensorDataCtrl(tensorType, sizeFactor, strideFactor))
   val dataCtrlDone = RegInit(false.B)
   val yPadCtrl0 = Module(new TensorPadCtrl(padType = "YPad0", sizeFactor))
   val yPadCtrl1 = Module(new TensorPadCtrl(padType = "YPad1", sizeFactor))
   val xPadCtrl0 = Module(new TensorPadCtrl(padType = "XPad0", sizeFactor))
   val xPadCtrl1 = Module(new TensorPadCtrl(padType = "XPad1", sizeFactor))
 
-  val tag = Reg(UInt(8.W))
-  val set = Reg(UInt(8.W))
+  val tag = Reg(UInt(log2Ceil(tp.numMemBlock).W))
+  val set = Reg(UInt(log2Ceil(tp.tensorLength).W))
 
   val sIdle :: sYPad0 :: sXPad0 :: sReadCmd :: sReadData :: sXPad1 :: sYPad1 :: Nil = Enum(7)
   val state = RegInit(sIdle)
@@ -193,7 +193,7 @@ class TensorLoad(tensorType: String = "none", debug: Boolean = false)
     tag := tag + 1.U
   }
 
-  when (state === sIdle || state === sReadCmd || (set === (tp.tensorLength - 1).U && tag === (tp.numMemBlock - 1).U)) {
+  when (state === sIdle || dataCtrlDone || (set === (tp.tensorLength - 1).U && tag === (tp.numMemBlock - 1).U)) {
     set := 0.U
   } .elsewhen ((io.vme_rd.data.fire() || isZeroPad) && tag === (tp.numMemBlock - 1).U) {
     set := set + 1.U
