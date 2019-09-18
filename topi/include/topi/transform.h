@@ -373,8 +373,7 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
   if (axis < 0) {
     axis += ndim;
   }
-  CHECK_LT(axis, inputs[0]->shape.size()) <<
-    "axis out of bounds";
+  CHECK_LT(axis, inputs[0]->shape.size()) << "axis out of bounds";
 
   Array<Expr> axis_sizes;
   for (auto t : inputs) {
@@ -391,8 +390,8 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
   }
   Array<Expr> out_shape;
 
-  for (size_t i = 0; i < inputs[0]->shape.size(); ++i) {
-    out_shape.push_back(i == static_cast<size_t>(axis) ? join_size : inputs[0]->shape[i]);
+  for (int i = 0; i < ndim; ++i) {
+    out_shape.push_back(i == axis ? join_size : inputs[0]->shape[i]);
   }
 
   return compute(
@@ -401,7 +400,7 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
       auto ind = indices[axis];
       for (size_t i = 0; i < inputs.size(); ++i) {
         Array<Expr> eval_indices;
-        for (int j = 0; j < axis; ++j) {
+        for (int j = 0; j < ndim; ++j) {
           if (j != axis) {
             eval_indices.push_back(indices[j]);
           } else {
