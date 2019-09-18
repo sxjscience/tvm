@@ -78,84 +78,14 @@ void BinaryOpMatchTypes(Expr& lhs, Expr& rhs) {  // NOLINT(*)
   }
 }
 
-// public function to check whether the expressions within the array have the same type
-// Also, broadcast the lanes of the inner expressions if possible.
-void ArrayOpMatchTypes(Array<Expr> &arr) {
-  if (arr.size() == 0) return;
-  int bcast_lanes = 1;
-  for (int i = 0; i < arr.size(); i++) {
-    int lanes = arr[i].type().lanes();
-    if (lanes != 1 && bcast_lanes != 1) {
-      if(lanes != bcast_lanes) {
-        LOG(FATAL) << "Cannot match the type of the arr. Fail at the idx="
-                   << i << ". Found lanes=" << lanes << " while the expected=" << bcast_lanes;
-      }
-    } else {
-      bcast_lanes = std::max(lanes, bcast_lanes);
-    }
-  }
-  // Broadcast the lanes of the inner expressions
-  for (int i = 0; i < arr.size(); i++) {
-    int lanes = arr[i].type().lanes();
-    if (lanes == 1 && bcast_lanes > 1) {
-      arr.Set(i, ir::Broadcast::make(arr[i], bcast_lanes));
-    }
-  }
-  // Type checking and casting, we use the following rule to cast data types:
-  // 1. If any element in the array has float type, all other integer types will be converted to the
-  //    float type with the highest precision
-  // 2. If all elements have integer types and there exists a signed integer type, all will
-  //    be converted to the signed integer type with the maximum number of bits. Otherwise, if all
-  //    have unsigned integer types, the elements will be converted to the unsigned integer type
-  //    with the maximum number of bits.
-  bool has_float = false;
-  bool has_signed_int = false;
-  int max_float_bits = 0;
-  int max_int_bits = 0;
-  Type cast_type = arr[0].type();
-  for (int i = 0; i < arr.size(); i++) {
-    const Type& ele_type = arr[i].type();
-    if (ele_type.is_float()) {
-      has_float = true;
-      max_float_bits = std::max(max_float_bits, ele_type.bits());
-    } else if (ele_type.is_int()) {
-      has_signed_int = true;
-      max_int_bits = std::max(max_int_bits, ele_type.bits());
-    } else if (ele_type.is_uint()) {
-      max_int_bits = std::max(max_int_bits, ele_type.bits());
-    } else {
-      LOG(FATAL) << "Does not support dtype. arr[" << i << "].dtype = " << ele_type;
-    }
-  }
-  if (has_float) {
-    cast_type = Float(max_float_bits, bcast_lanes);
-  } else if (has_signed_int) {
-    cast_type = Int(max_int_bits, bcast_lanes);
-  } else {
-    cast_type = UInt(max_int_bits, bcast_lanes);
-  }
+// Public function to check whether the expressions within the array have the same type
+void ArrayMatchTypes(const Array<Expr> &arr) {
+  if (arr.empty()) return;
+  Type base_type = arr[0].type();
   for(int i = 0; i < arr.size(); i++) {
-    if (arr[i].type() != cast_type) {
-      arr.Set(i, SimpleCast(cast_type, arr[i]));
-    }
-  }
-}
-
-// Function that matches the types of indices in RangeSwitch.
-// Automatically cast the dtypes of uppers to be the same as the dtype of idx.
-void MatchRangeSwitchIdxTypes(Expr &idx, Array<Expr> &uppers) {
-  CHECK(idx.type().is_scalar()) << "Only scalar types are supported for idx. idx.lanes="
-                                       << idx.type().lanes();
-  for (const auto& expr : uppers) {
-    CHECK(expr.type().is_scalar()) << "Only scalar types are supported for expr. expr.lanes="
-                                          << expr.type().lanes();
-  }
-  const Type& idx_type = idx.type();
-  // Cast dtypes of uppers to be the same as idx
-  for (int i = 0; i < uppers.size(); i++) {
-    if (uppers[i].type() != idx_type) {
-      uppers.Set(i, SimpleCast(idx_type, uppers[i]));
-    }
+    CHECK_EQ(arr[i].type(), base_type)
+           << "Data type mismatch. arr[" << i << "].dtype = " << arr[i].type()
+           << ", arr[0].dtype = " << base_type;
   }
 }
 
@@ -376,10 +306,18 @@ Expr range_switch(Expr idx, Array<Expr> uppers, Array<Expr> values) {
   if (uppers.empty()) {
     return values[values.size() - 1];
   }
-  ArrayOpMatchTypes(values);
+  ArrayMatchTypes(values);
+  // Match the idx and uppers types are all scalars and have the same type.
+  CHECK(idx.type().is_scalar()) << "Only scalar types are supported for idx. idx.lanes="
+                                << idx.type().lanes();
+  for (int i = 0; i < uppers.size(); i++) {
+    CHECK_EQ(uppers[i].type(), idx.type())
+               << "We force all scalar types to be the same."
+               << "idx.type() = " << idx.type()
+               << " uppers[" << i << "].type() = " << uppers[i].type();
+  }
   // Try to derive the results if the idx has int types and the value falls inside the range
   // determined by uppers.
-  MatchRangeSwitchIdxTypes(idx, uppers);
   int eager_sel = -1;
   if (idx.get()->is_type<IntImm>()) {
     eager_sel = EagerEvaluateRangeSwitch<IntImm>(idx, uppers);
