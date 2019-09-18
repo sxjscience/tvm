@@ -25,21 +25,22 @@ from .base import string_types
 # Node base class
 _CLASS_NODE_BASE = None
 
-
 def _set_class_node_base(cls):
     global _CLASS_NODE_BASE
     _CLASS_NODE_BASE = cls
 
 
-def _scalar_value_type_inference(value):
-    if isinstance(value, bool):
+def _scalar_type_inference(value):
+    if hasattr(value, 'dtype'):
+        dtype = str(value.dtype)
+    elif isinstance(value, bool):
         dtype = 'bool'
     elif isinstance(value, float):
-        dtype = 'float64'
+        # We intentionally convert the float to float32 since it's more common in DL.
+        dtype = 'float32'
     elif isinstance(value, int):
-        dtype = 'int64'
-    elif hasattr(value, 'dtype'):
-        dtype = str(value.dtype)
+        # We intentionally convert the python int to int32 since it's more common in DL.
+        dtype = 'int32'
     else:
         raise NotImplementedError('Cannot automatically inference the type.'
                                   ' value={}'.format(value))
@@ -111,5 +112,5 @@ def const(value, dtype=None):
         Constant expression corresponds to the value.
     """
     if dtype is None:
-        dtype = _scalar_value_type_inference(value)
+        dtype = _scalar_type_inference(value)
     return _api_internal._const(value, dtype)

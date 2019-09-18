@@ -123,6 +123,11 @@ def test_forward_activations():
                  keras.layers.Activation('selu'),
                  keras.layers.ReLU(),
                  keras.layers.ReLU(max_value=6.),
+                 keras.layers.ReLU(max_value=6., threshold=0.),
+                 keras.layers.ReLU(max_value=6., threshold=1.),
+                 keras.layers.ReLU(max_value=6., threshold=1., negative_slope=0.),
+                 keras.layers.ReLU(max_value=6., threshold=1., negative_slope=0.5),
+                 keras.layers.ReLU(max_value=6., threshold=1., negative_slope=1.),
                  keras.layers.LeakyReLU(alpha=0.3),
                  keras.layers.PReLU(weights=np.random.rand(1, 32, 32, 3)),
                  keras.layers.ELU(alpha=0.5),
@@ -176,6 +181,7 @@ def test_forward_conv():
                                       strides=(2, 2), padding='same'),
                   keras.layers.Conv2D(filters=10, kernel_size=(3, 3),
                                       dilation_rate=(2, 2), padding='same'),
+                  keras.layers.Conv2D(filters=1, kernel_size=(3, 3), padding='same'),
                   keras.layers.DepthwiseConv2D(kernel_size=(3, 3), padding='same'),
                   keras.layers.Conv2DTranspose(filters=10, kernel_size=(3, 3), padding='valid'),
                   keras.layers.SeparableConv2D(filters=10, kernel_size=(3, 3), padding='same')]
@@ -189,14 +195,40 @@ def test_forward_upsample(interpolation='nearest'):
     data = keras.layers.Input(shape=(32, 32, 3))
     x = keras.layers.UpSampling2D(size=(3, 3), interpolation=interpolation)(data)
     keras_model = keras.models.Model(data, x)
-    verify_keras_frontend(keras_model, need_transpose=False)
+    verify_keras_frontend(keras_model)
 
 
 def test_forward_reshape():
+    # input_shape len is 3, target_shape len is 3
     data = keras.layers.Input(shape=(32, 32, 3))
-    x = keras.layers.Reshape(target_shape=(32, 32, 3))(data)
+    x = keras.layers.Reshape(target_shape=(16, 64, 3))(data)
     keras_model = keras.models.Model(data, x)
     verify_keras_frontend(keras_model)
+    # input_shape len is 3, target_shape len is 2
+    data = keras.layers.Input(shape=(32, 8, 3))
+    x = keras.layers.Reshape(target_shape=(256, 3))(data)
+    keras_model = keras.models.Model(data, x)
+    verify_keras_frontend(keras_model)
+    # input_shape len is 2, target_shape len is 3
+    data = keras.layers.Input(shape=(256, 3))
+    x = keras.layers.Reshape(target_shape=(8, 32, 3))(data)
+    keras_model = keras.models.Model(data, x)
+    verify_keras_frontend(keras_model)
+    # input_shape len is 2, target_shape len is 1
+    data = keras.layers.Input(shape=(2, 8))
+    x = keras.layers.Reshape(target_shape=(16,))(data)
+    keras_model = keras.models.Model(data, x)
+    verify_keras_frontend(keras_model, need_transpose=False)
+    # input_shape len is 1, target_shape len is 2
+    data = keras.layers.Input(shape=(16,))
+    x = keras.layers.Reshape(target_shape=(4, 4))(data)
+    keras_model = keras.models.Model(data, x)
+    verify_keras_frontend(keras_model, need_transpose=False)
+    # input_shape len is 2, target_shape len is 2
+    data = keras.layers.Input(shape=(2, 8))
+    x = keras.layers.Reshape(target_shape=(4, 4))(data)
+    keras_model = keras.models.Model(data, x)
+    verify_keras_frontend(keras_model, need_transpose=False)
 
 
 def test_forward_crop():

@@ -208,9 +208,14 @@ inline Tensor reshape(const Tensor& x,
                       std::string name = "T_reshape",
                       std::string tag = kInjective) {
   auto x_shape = x->shape;
+  Array<Expr> newshape_int32;
+
+  for (const auto &ele : newshape) {
+    newshape_int32.push_back(cast(Int(32), ele));
+  }
   return compute(
-    newshape, [&](const Array<Var>& indices) {
-      return x(UnravelIndex(RavelIndex(Array<Expr>{indices.begin(), indices.end()}, newshape),
+    newshape_int32, [&](const Array<Var>& indices) {
+      return x(UnravelIndex(RavelIndex(Array<Expr>{indices.begin(), indices.end()}, newshape_int32),
                             x_shape));
     }, name, tag);
 }
@@ -1148,9 +1153,9 @@ inline Tensor tensordot(const Tensor& A,
   return compute(output_shape, func, name, tag);
 }
 
-inline Tensor arange(const Expr start,
-                     const Expr stop,
-                     const Expr step,
+inline Tensor arange(const Expr& start,
+                     const Expr& stop,
+                     const Expr& step,
                      Type dtype,
                      std::string name = "T_arange",
                      std::string tag = kInjective) {
