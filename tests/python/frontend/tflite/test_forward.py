@@ -229,6 +229,26 @@ def test_forward_transpose():
     _test_forward_transpose((2, 3, 4, 5), (3, 0, 1, 2))
     _test_forward_transpose((2, 3, 4, 5), ())
 
+#######################################################################
+# tile
+# ---------
+
+
+def _test_forward_tile(in_shape, reps, dtype):
+    data = np.random.uniform(-5, 5, size=in_shape).astype(dtype)
+
+    with tf.Graph().as_default():
+        in_data = array_ops.placeholder(shape=data.shape, dtype=data.dtype)
+
+        out = array_ops.tile(in_data, reps)
+
+        compare_tflite_with_tvm(data, 'Placeholder:0', [in_data], [out])
+
+
+def test_forward_tile():
+    _test_forward_tile((2, ), (3, ), "int32")
+    _test_forward_tile((2, 2), (2, 3), "float32")
+
 
 #######################################################################
 # Pooling
@@ -336,6 +356,7 @@ def test_forward_convolution():
     _test_convolution([4, 17, 17, 19], [3, 3, 19, 1], [1, 1], [2, 2], 'VALID', 'NHWC', True)
     _test_convolution([4, 17, 17, 124], [1, 1, 124, 1], [1, 1], [1, 1], 'SAME', 'NHWC', True)
     _test_convolution([4, 17, 17, 12], [3, 3, 12, 1], [1, 1], [2, 2], 'VALID', 'NHWC', True)
+    _test_convolution([4, 17, 17, 12], [3, 3, 12, 2], [1, 1], [2, 2], 'VALID', 'NHWC', True)
 
 
 #######################################################################
@@ -855,6 +876,9 @@ if __name__ == '__main__':
 
     # Transpose
     test_forward_transpose()
+
+    # Tile
+    test_forward_tile()
 
     # Transforms
     test_forward_concatenation()
