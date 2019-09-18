@@ -398,10 +398,19 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
   return compute(
     out_shape, [&](const Array<Var>& indices) {
       Array<Expr> values;
+      auto ind = indices[axis];
       for (size_t i = 0; i < inputs.size(); ++i) {
-        values.push_back(inputs[i](indices));
+        Array<Expr> eval_indices;
+        for (size_t j = 0; j < static_cast<size_t>(axis); ++j) {
+          if (j != axis) {
+            eval_indices.push_back(indices[j]);
+          } else {
+            eval_indices.push_back(ind);
+          }
+        }
+        values.push_back(inputs[i](eval_indices));
+        ind -= uppers[i];
       }
-      values.push_back(inputs[0](indices));
       Expr ret = tvm::range_switch(indices[axis], uppers, values);
       return ret;
     }, name, tag);
