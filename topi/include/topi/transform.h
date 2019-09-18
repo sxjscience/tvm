@@ -401,7 +401,7 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
       auto ind = indices[axis];
       for (size_t i = 0; i < inputs.size(); ++i) {
         Array<Expr> eval_indices;
-        for (size_t j = 0; j < static_cast<size_t>(axis); ++j) {
+        for (int j = 0; j < axis; ++j) {
           if (j != axis) {
             eval_indices.push_back(indices[j]);
           } else {
