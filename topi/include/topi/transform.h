@@ -404,11 +404,10 @@ inline Tensor new_concatenate(const Array<Tensor>& inputs,
           if (j != axis) {
             eval_indices.push_back(indices[j]);
           } else {
-            eval_indices.push_back(ind);
+            eval_indices.push_back(indices[j] - uppers[i]);
           }
         }
         values.push_back(inputs[i](eval_indices));
-        ind -= uppers[i];
       }
       values.push_back(values[0]);
       Expr ret = tvm::range_switch(ind, uppers, values);
