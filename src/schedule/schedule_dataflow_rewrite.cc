@@ -669,6 +669,12 @@ void InjectInline(ScheduleNode* sch) {
 
 Schedule Schedule::normalize() {
   Schedule sn = copy();
+  for(auto& stage: sn->stages) {
+    std::cout << "In Stage:" << stage << std::endl;
+    for (auto iv: stage->all_iter_vars) {
+      std::cout << "IterVal = " << iv << " " << iv->iter_type << std::endl;
+    }
+  }
   InjectInline(sn.operator->());
   RebaseNonZeroMinLoop(sn);
   return sn;
