@@ -87,6 +87,7 @@ MakeLoopNest(const Stage& stage,
           case kUnrolled: for_type = ForType::Unrolled; break;
           case kVectorized: for_type = ForType::Vectorized; break;
           case kParallelized: for_type = ForType::Parallel; break;
+          case kRangeSplit: for_type = ForType::RangeSplit; break;
           case kDataPar: break;
           case kTensorized: break;
           default: LOG(FATAL) << "Unknown iter type"
