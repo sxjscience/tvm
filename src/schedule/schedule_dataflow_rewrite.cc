@@ -672,7 +672,8 @@ Schedule Schedule::normalize() {
   for(auto& stage: sn->stages) {
     std::cout << "In Stage:" << stage << std::endl;
     for (auto iv: stage->all_iter_vars) {
-      std::cout << "IterVal = " << iv << " " << iv->iter_type << std::endl;
+      std::cout << "IterVal = " << iv << " " << iv->iter_type << " "
+      << stage->iter_var_attrs[iv]->iter_type << std::endl;
     }
   }
   InjectInline(sn.operator->());
