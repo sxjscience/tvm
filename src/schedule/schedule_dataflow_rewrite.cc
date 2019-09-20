@@ -671,9 +671,12 @@ Schedule Schedule::normalize() {
   Schedule sn = copy();
   for(auto& stage: sn->stages) {
     std::cout << "In Stage:" << stage << std::endl;
+    auto iter_val_attrs = stage->iter_var_attrs;
     for (auto iv: stage->all_iter_vars) {
-      std::cout << "IterVal = " << iv << " " << iv->iter_type << " "
-      << stage->iter_var_attrs[iv]->iter_type << std::endl;
+      std::cout << "IterVal = " << iv << " " << iv->iter_type << std::endl;
+      if(iter_val_attrs.find(iv) != iter_val_attrs.end()) {
+        std::cout << " Found! " << iter_val_attrs[iv]->iter_type << std::endl;
+      }
     }
   }
   InjectInline(sn.operator->());
