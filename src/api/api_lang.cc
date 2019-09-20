@@ -400,6 +400,9 @@ TVM_REGISTER_API("_StageTensorize")
 TVM_REGISTER_API("_StageParallel")
 .set_body_method(&Stage::parallel);
 
+TVM_REGISTER_API("_StageRangeSplit")
+.set_body_method(&Stage::range_split);
+
 TVM_REGISTER_API("_StagePragma")
 .set_body_method(&Stage::pragma);
 

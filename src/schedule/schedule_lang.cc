@@ -399,6 +399,18 @@ Stage& Stage::parallel(IterVar var) {   // NOLINT(*)
   return *this;
 }
 
+Stage& Stage::range_split(IterVar var) {   // NOLINT(*)
+  CHECK(var->iter_type == kDataPar ||
+        var->iter_type == kOpaque ||
+        var->iter_type == kUnrolled ||
+        var->iter_type == kVectorized ||
+        var->iter_type == kTensorized ||
+        var->iter_type == kParallelized)
+    << "Cannot range_split on " << IterVarType2String(var->iter_type);
+  SetAttrIterType(operator->(), var, kRangeSplit);
+  return *this;
+}
+
 Stage& Stage::pragma(IterVar var,
                      const std::string& pragma_type,
                      const Expr& pragma_value) {   // NOLINT(*)
@@ -406,6 +418,8 @@ Stage& Stage::pragma(IterVar var,
     this->unroll(var);
   } else if (pragma_type == "vectorize") {
     this->vectorize(var);
+  } else if (pragma_type == "range_split") {
+    this->range_split(var);
   } else {
     UpdateIterVarAttr(
         operator->(), var, [pragma_type, pragma_value](IterVarAttrNode* n) {

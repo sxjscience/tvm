@@ -334,7 +334,12 @@ enum IterVarType : int {
   /*!
    * \brief Marks boundary of tensorization intrinsic.
    */
-  kTensorized = 8
+  kTensorized = 8,
+  /*!
+   * \brief Marks the loop variable has multiple mutually disjoint ranges and can be split into
+   *        multiple loops.
+   */
+  kRangeSplit = 9
 };
 
 /*!
@@ -441,6 +446,7 @@ inline const char* IterVarType2String(IterVarType t) {
     case kVectorized: return "Vectorized";
     case kParallelized: return "Parallelized";
     case kTensorized: return "Tensorized";
+    case kRangeSplit: return "RangeSplit";
   }
   return "Unknown";
 }

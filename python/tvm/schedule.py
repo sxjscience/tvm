@@ -568,6 +568,16 @@ class Stage(NodeBase):
         """
         _api_internal._StageParallel(self, var)
 
+    def range_split(self, var):
+        """
+
+        Parameters
+        ----------
+        var : IterVar
+            The loop variable to be split into multiple ranges.
+        """
+        _api_internal._StageRangeSplit(self, var)
+
     def pragma(self, var, pragma_type, pragma_value=None):
         """Annotate the iteration with pragma
 
