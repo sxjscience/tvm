@@ -247,6 +247,8 @@ IterVarType ForTypeToIterVarType(ir::ForType for_type) {
     return kVectorized;
   case ForType::Unrolled:
     return kUnrolled;
+  case ForType::RangeSplit:
+    return kRangeSplit;
   default:
     return kDataPar;
   }
@@ -262,6 +264,8 @@ ir::ForType IterVarTypeToForType(IterVarType iter_type) {
     return ForType::Vectorized;
   case kUnrolled:
     return ForType::Unrolled;
+  case kRangeSplit:
+    return ForType::RangeSplit;
   default:
     return ForType::Serial;
   }

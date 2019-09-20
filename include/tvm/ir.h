@@ -1097,7 +1097,7 @@ enum class ForType : int {
   Vectorized = 2,
   /*! \brief Unroll annotation. */
   Unrolled = 3,
-  /*! \brief Notate that the loop variable will potentially be split into multiple loops. */
+  /*! \brief Notate that the loop variable can potentially be split into multiple loops. */
   RangeSplit = 4
 };
 
