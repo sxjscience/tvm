@@ -505,7 +505,7 @@ void RebaseNonZeroMinLoop(const Schedule& sch) {
     auto root_iter_vars = s->op->root_iter_vars();
     ArrayNode* leaf_vars = s->leaf_iter_vars.CopyOnWrite();
     for (IterVar iv : root_iter_vars) {
-      std::cout << "iter var=" << iv << std::endl;
+      std::cout << "iter var=" << iv <<  " " << iv->iter_type << std::endl;
       size_t idx = FindNodeRef(leaf_vars, iv);
       auto it  = s->iter_var_attrs.find(iv);
       // don;t need to rebase path that are binded.
