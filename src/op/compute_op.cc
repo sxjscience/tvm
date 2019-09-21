@@ -389,7 +389,9 @@ Stmt MakeComputeStmt(const ComputeOpNode* self,
   } else {
     std::vector<Stmt> provides;
     for (size_t i = 0; i < self->body.size(); ++i) {
+      std::cout << "body[" << i << "] = " << self->body[i] << std::endl;
       provides.emplace_back(MakeProvide(self, stage->op.output(i)));
+      std::cout << "provides[" << i << "] = " << provides[i] << std::endl;
     }
     Stmt provide = Block::make(provides);
     provide = MergeNest(n.main_nest, provide);
@@ -452,20 +454,11 @@ Stmt ComputeOpNode::BuildProvide(
   CHECK_EQ(stage->op.operator->(), this);
   ComputeType ctype = DetectComputeType(this, stage);
   if (ctype == ComputeType::kCrossThreadReduction) {
-    std::cout << "kCrossThreadReduction" << std::endl;
-    int tmp;
-    std::cin >> tmp;
     // specially handle cross thread reduction.
     return MakeCrossThreadReduction(this, stage, dom_map, debug_keep_trivial_loop);
   } else if (ctype == ComputeType::kTensorize) {
-    std::cout << "kTensorize" << std::endl;
-    int tmp;
-    std::cin >> tmp;
     return MakeTensorize(this, stage, dom_map, debug_keep_trivial_loop);
   } else {
-    std::cout << "kElse" << std::endl;
-    int tmp;
-    std::cin >> tmp;
     return MakeComputeStmt(this, stage, dom_map, debug_keep_trivial_loop);
   }
 }
