@@ -367,9 +367,6 @@ Stmt MakeComputeStmt(const ComputeOpNode* self,
     Stmt init, provide;
     Array<Tensor> source;
     for (size_t i = 0; i < self->body.size(); ++i) {
-      std::cout << "body[" << i << "] = " << self->body[i] << std::endl;
-      int tmp;
-      std::cin >> tmp;
       source.push_back(stage->op.output(i));
     }
     MakeReduction(self, source, &init, &provide);
