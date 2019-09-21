@@ -262,6 +262,13 @@ Stmt VectorizeLoop(Stmt stmt);
 Stmt SkipVectorize(Stmt stmt);
 
 /*!
+ * \brief Split the inner loop variables that are denoted as range_switch
+ * \param stmt The statement to be optimized.
+ * \return Transformed stmt.
+ */
+Stmt SplitRangeSwitch(Stmt stmt);
+
+/*!
 * \brief instruments bound checkers.
 * \param stmt The statement to be instrumented.
 * \return Instrumented stmt.
