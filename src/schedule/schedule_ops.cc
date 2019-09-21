@@ -44,6 +44,9 @@ Stmt MakePipeline(const Stage& s,
                   Stmt consumer,
                   bool debug_keep_trivial_loop) {
   Stmt producer = s->op->BuildProvide(s, dom_map, debug_keep_trivial_loop);
+  std::cout << "producer=" << producer << std::endl;
+  int tmp;
+  std::cin >> tmp;
   if (producer.defined()) {
     producer = ProducerConsumer::make(s->op, true, producer);
   }
