@@ -399,7 +399,6 @@ Stmt ScheduleOps(
     } else if (attach_spec->attach_type == kScanUpdate) {
       // Handle scan update
       CHECK(body.defined());
-      std::cout << "RUN in scan update! body=" << body << std::endl;
       InjectScanStep mu(s, attach_spec->attach_stage->op, dom_map, false, debug_keep_trivial_loop);
       body = mu.Mutate(body);
       CHECK(mu.found_attach)
@@ -408,14 +407,12 @@ Stmt ScheduleOps(
       // do nothing
     } else if (attach_spec->attach_type == kGroupRoot) {
       CHECK(!s->group.defined());
-      std::cout << "RUN in group root! body=" << body << std::endl;
       body = MakePipeline(s, dom_map, body, debug_keep_trivial_loop);
     } else {
       CHECK_EQ(attach_spec->attach_type, kScope);
       CHECK(body.defined());
       InjectAttach mutator(s, attach_spec, dom_map, debug_keep_trivial_loop);;
       body = mutator.Mutate(body);
-      std::cout << "RUN! body=" << body << std::endl;
       CHECK(mutator.found_attach)
           << "did not find attachment point for " << s << " in "
           << attach_spec->attach_stage->op  << " x " << attach_spec->attach_ivar
