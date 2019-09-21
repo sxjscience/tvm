@@ -452,11 +452,20 @@ Stmt ComputeOpNode::BuildProvide(
   CHECK_EQ(stage->op.operator->(), this);
   ComputeType ctype = DetectComputeType(this, stage);
   if (ctype == ComputeType::kCrossThreadReduction) {
+    std::cout << "kCrossThreadReduction" << std::endl;
+    int tmp;
+    std::cin >> tmp;
     // specially handle cross thread reduction.
     return MakeCrossThreadReduction(this, stage, dom_map, debug_keep_trivial_loop);
   } else if (ctype == ComputeType::kTensorize) {
+    std::cout << "kTensorize" << std::endl;
+    int tmp;
+    std::cin >> tmp;
     return MakeTensorize(this, stage, dom_map, debug_keep_trivial_loop);
   } else {
+    std::cout << "kElse" << std::endl;
+    int tmp;
+    std::cin >> tmp;
     return MakeComputeStmt(this, stage, dom_map, debug_keep_trivial_loop);
   }
 }
