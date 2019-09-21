@@ -32,37 +32,44 @@ Stmt MergeNest(const std::vector<Stmt>& nest, Stmt body) {
   for (auto ri = nest.rbegin(); ri != nest.rend(); ++ri) {
     Stmt s = *ri;
     if (const auto* for_ = s.as<For>()) {
+      std::cout << "for node found!" << s << std::endl;
       auto n = make_node<For>(*for_);
       CHECK(is_no_op(n->body));
       n->body = body;
       body = Stmt(n);
     } else if (const auto* let = s.as<LetStmt>()) {
+      std::cout << "let node found!" << s << std::endl;
       auto n = make_node<LetStmt>(*let);
       CHECK(is_no_op(n->body));
       n->body = body;
       body = Stmt(n);
     } else if (const auto* attr = s.as<AttrStmt>()) {
+      std::cout << "attrstmt node found!" << s << std::endl;
       auto n = make_node<AttrStmt>(*attr);
       CHECK(is_no_op(n->body));
       n->body = body;
       body = Stmt(n);
     } else if (const auto* ite = s.as<IfThenElse>()) {
+      std::cout << "if_then_else node found!" << s << std::endl;
       auto n = make_node<IfThenElse>(*ite);
       CHECK(is_no_op(n->then_case));
       CHECK(!n->else_case.defined());
       n->then_case = body;
       body = Stmt(n);
     } else if (const auto* block = s.as<Block>()) {
+      std::cout << "Block node found!" << s << std::endl;
       auto n = make_node<Block>(*block);
       CHECK(is_no_op(n->rest));
       n->rest = body;
       body = Stmt(n);
     } else if (const auto* assert_ = s.as<AssertStmt>()) {
+      std::cout << "Assert node found!" << s << std::endl;
       auto n = make_node<AssertStmt>(*assert_);
       CHECK(is_no_op(n->body));
       n->body = body;
       body = Stmt(n);
     } else if (const auto* alloc = s.as<Allocate>()) {
+      std::cout << "Allocate node found!" << s << std::endl;
       auto n = make_node<Allocate>(*alloc);
       CHECK(is_no_op(n->body));
       n->body = body;

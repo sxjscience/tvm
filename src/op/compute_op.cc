@@ -389,9 +389,7 @@ Stmt MakeComputeStmt(const ComputeOpNode* self,
   } else {
     std::vector<Stmt> provides;
     for (size_t i = 0; i < self->body.size(); ++i) {
-      std::cout << "body[" << i << "] = " << self->body[i] << std::endl;
       provides.emplace_back(MakeProvide(self, stage->op.output(i)));
-      std::cout << "provides[" << i << "] = " << provides[i]->_type_key << std::endl;
     }
     Stmt provide = Block::make(provides);
     provide = MergeNest(n.main_nest, provide);
