@@ -202,8 +202,6 @@ Stmt IRMutator::Mutate_(const IfThenElse *op, const Stmt& s) {
   }
 }
 
-Stmt IRMutator::Mutate_(const RangeSwitch *op, )
-
 Stmt IRMutator::Mutate_(const Store *op, const Stmt& s) {
   Expr value = this->Mutate(op->value);
   Expr index = this->Mutate(op->index);
