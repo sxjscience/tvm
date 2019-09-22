@@ -40,16 +40,16 @@ class RangeSwitchSelector final : public IRVisitor {
       // partition const loop when sets split_const_loop_
       std::cout << op->name << std::endl;
       if (op->is_intrinsic(intrinsic::tvm_range_switch)) {
-        call_record_.insert(op);
+        call_record_.push_back(op);
       }
     }
     void Visit_(const For* op) {
       if (op->for_type == ForType::RangeSplit) {
-        loop_record_.insert(op);
+        for_record_.push_back(op);
       }
     }
-    std::unordered_set<const Call*> call_record_;
-    std::unordered_set<const For*> for_record_;
+    std::vector<const Call*> call_record_;
+    std::vector<const For*> for_record_;
 };
 
 class RangeSwitchSplitter final : public IRMutator {
@@ -60,14 +60,12 @@ class RangeSwitchSplitter final : public IRMutator {
 Stmt SplitRangeSwitch(Stmt stmt) {
   RangeSwitchSelector selector;
   selector.Visit(stmt);
-  std::unordered_set<Var> loop_vars;
-  for (auto op: selector.for_record_) {
-    loop_vars.insert(op->loop_var);
-  }
   for (auto op: selector.call_record_) {
-    std::cout << op->args[0] << std::endl;
-    if (loop_vars.find(op->args[0]) != loop_vars.end()) {
-      std::cout << "Found!" << op->args[0] << std::endl;
+    std::cout << "tvm_iter_var:" << op->args[0] << std::endl;
+    for (auto for_op : selector.for_record_) {
+      if (Equal(op->args[0], for_op->loop_var)) {
+        std::cout << "Found!" << op->args[0] << std::endl;
+      }
     }
   }
   return stmt;
