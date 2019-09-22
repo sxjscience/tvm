@@ -398,6 +398,7 @@ def lower(sch,
         cfg.auto_unroll_max_depth,
         cfg.auto_unroll_max_extent,
         cfg.unroll_explicit)
+    stmt = ir_pass.SplitRangeSwitch(stmt)
     for f in lower_phase2:
         stmt = f(stmt)
     # Phase 3

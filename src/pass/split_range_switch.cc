@@ -34,12 +34,26 @@
 namespace tvm {
 namespace ir {
 
-//class RangeSwitchSplitter : public IRMutator {
-//
-//
-//};
+class RangeSwitchSelector final : public IRVisitor {
+  public:
+    void Visit_(const Call* op) {
+      // partition const loop when sets split_const_loop_
+      std::cout << op->name << std::endl;
+      if(op->is_intrinsic(intrinsic::tvm_range_switch)) {
+        record_[op] = 0;
+      }
+    }
+    std::unordered_map<const Call*, int> record_;
+};
+
+class RangeSwitchSplitter final : public IRMutator {
+  public:
+    RangeSwitchSelector selector;
+};
 
 Stmt SplitRangeSwitch(Stmt stmt) {
+  RangeSwitchSelector selector;
+  selector.Visit(stmt);
   return stmt;
 }
 
