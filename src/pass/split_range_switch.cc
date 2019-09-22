@@ -35,20 +35,22 @@ namespace ir {
 class RangeSwitchSelector final : public IRVisitor {
   public:
     void Visit_(const Call* op) {
-      // partition const loop when sets split_const_loop_
-      std::cout << "Call node found!:" << op->name << std::endl;
       if (op->is_intrinsic(intrinsic::tvm_range_switch)) {
         call_record_.insert(op);
       }
       IRVisitor::Visit_(op);
     }
+
     void Visit_(const For* op) {
-      std::cout << op->extent << std::endl;
-      std::cout << static_cast<int>(op->for_type) << std::endl;
       if (op->for_type == ForType::RangeSplit) {
         std::cout << "For!" << std::endl;
         for_record_.insert(op);
       }
+      IRVisitor::Visit_(op);
+    }
+
+    void Visit_(const Block* op) {
+      std::cout << op->first << " " << op->rest << std::endl;
       IRVisitor::Visit_(op);
     }
     std::unordered_set<const Call*> call_record_;
@@ -57,7 +59,11 @@ class RangeSwitchSelector final : public IRVisitor {
 
 class RangeSwitchSplitter final : public IRMutator {
   public:
+
+
+  private:
     RangeSwitchSelector selector;
+
 };
 
 Stmt SplitRangeSwitch(Stmt stmt) {
