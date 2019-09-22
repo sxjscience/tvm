@@ -36,7 +36,7 @@ class RangeSwitchSelector final : public IRVisitor {
   public:
     void Visit_(const Call* op) {
       if (op->is_intrinsic(intrinsic::tvm_range_switch)) {
-        call_record_.insert(op);
+        call_record_.push_back(op);
       }
       IRVisitor::Visit_(op);
     }
@@ -44,17 +44,20 @@ class RangeSwitchSelector final : public IRVisitor {
     void Visit_(const For* op) {
       if (op->for_type == ForType::RangeSplit) {
         std::cout << "For!" << std::endl;
-        for_record_.insert(op);
+        for_record_.push_back(op);
       }
       IRVisitor::Visit_(op);
     }
 
     void Visit_(const Block* op) {
-      std::cout << op->first << " " << op->rest << std::endl;
+      std::cout << "First:" << std::endl;
+      std::cout << op->first << std::endl;
+      std::cout << "Rest:" << std::endl;
+      std::cout << op->rest << std::endl;
       IRVisitor::Visit_(op);
     }
-    std::unordered_set<const Call*> call_record_;
-    std::unordered_set<const For*> for_record_;
+    std::vector<const Call*> call_record_;
+    std::vector<const For*> for_record_;
 };
 
 class RangeSwitchSplitter final : public IRMutator {
