@@ -144,7 +144,7 @@ class RangeSwitchOpMerger final : public IRMutator {
 
 class RangeSwitchRewriter final : public IRMutator {
   public:
-    Expr Mutate_(const Call* op, const Expr& e) {
+    Expr Mutate_(const Call* op, const Expr& e) final {
       if (op->is_intrinsic(intrinsic::tvm_range_switch)) {
         int value_num = op->args.size() / 2;
         Expr ret = op->args[2 * value_num - 1]; // Default value
