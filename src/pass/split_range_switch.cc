@@ -28,8 +28,6 @@
 #include <tvm/arithmetic.h>
 #include <unordered_map>
 #include <unordered_set>
-#include "../arithmetic/int_set.h"
-#include "../runtime/thread_storage_scope.h"
 
 namespace tvm {
 namespace ir {
@@ -42,6 +40,7 @@ class RangeSwitchSelector final : public IRVisitor {
       if (op->is_intrinsic(intrinsic::tvm_range_switch)) {
         call_record_.insert(op);
       }
+      IRVisitor::Visit_(op);
     }
     void Visit_(const For* op) {
       std::cout << op->extent << std::endl;
@@ -50,6 +49,7 @@ class RangeSwitchSelector final : public IRVisitor {
         std::cout << "For!" << std::endl;
         for_record_.insert(op);
       }
+      IRVisitor::Visit_(op);
     }
     std::unordered_set<const Call*> call_record_;
     std::unordered_set<const For*> for_record_;
