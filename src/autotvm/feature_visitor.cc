@@ -46,6 +46,9 @@ void FeatureVisitor::Visit_(const For *op) {
     case ForType::Vectorized:
       ann = kVectorized;
       break;
+    case ForType::RangeSplit:
+      ann = kRangeSplit;
+      break;
     case ForType::Serial:
       ann = kSerial;
       break;
