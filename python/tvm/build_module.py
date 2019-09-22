@@ -380,6 +380,7 @@ def lower(sch,
     # Phase 1
     stmt = ir_pass.StorageFlatten(stmt, binds, 64, cfg.instrument_bound_checkers)
     stmt = ir_pass.CanonicalSimplify(stmt)
+    stmt = ir_pass.SplitRangeSwitch(stmt)
     for f in lower_phase1:
         stmt = f(stmt)
     # Phase 2
@@ -398,7 +399,6 @@ def lower(sch,
         cfg.auto_unroll_max_depth,
         cfg.auto_unroll_max_extent,
         cfg.unroll_explicit)
-    stmt = ir_pass.SplitRangeSwitch(stmt)
     for f in lower_phase2:
         stmt = f(stmt)
     # Phase 3
