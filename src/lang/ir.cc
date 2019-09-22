@@ -867,6 +867,9 @@ std::ostream &operator<<(std::ostream& out, ForType type) { // NOLINT(*)
     case ForType::Vectorized:
       out << "vectorized";
       break;
+    case ForType::RangeSplit:
+      out << "range_split";
+      break;
   }
   return out;
 }

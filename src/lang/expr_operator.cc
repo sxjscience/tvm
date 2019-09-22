@@ -82,7 +82,7 @@ void BinaryOpMatchTypes(Expr& lhs, Expr& rhs) {  // NOLINT(*)
 void ArrayMatchTypes(const Array<Expr> &arr) {
   if (arr.empty()) return;
   Type base_type = arr[0].type();
-  for(int i = 0; i < arr.size(); i++) {
+  for(size_t i = 0; i < arr.size(); i++) {
     CHECK_EQ(arr[i].type(), base_type)
            << "Data type mismatch. arr[" << i << "].dtype = " << arr[i].type()
            << ", arr[0].dtype = " << base_type;
@@ -97,10 +97,10 @@ int EagerEvaluateRangeSwitch(const Expr& idx, const Array<Expr>& uppers) {
   const T* op = idx.as<T>();
   CHECK(op != nullptr) << "Type mismatch, the given idx cannot be casted to the specified type.";
   auto idx_val = op->value;
-  for (int i = 0; i < uppers.size(); i++) {
+  for (size_t i = 0; i < uppers.size(); i++) {
     if (const T* upper_op = uppers[i].as<T>()) {
       if (idx_val < upper_op->value) {
-        return i;
+        return static_cast<int>(i);
       }
     } else {
       cannot_eager_eval = true;
@@ -310,7 +310,7 @@ Expr range_switch(Expr idx, Array<Expr> uppers, Array<Expr> values) {
   // Match the idx and uppers types are all scalars and have the same type.
   CHECK(idx.type().is_scalar()) << "Only scalar types are supported for idx. idx.lanes="
                                 << idx.type().lanes();
-  for (int i = 0; i < uppers.size(); i++) {
+  for (size_t i = 0; i < uppers.size(); i++) {
     CHECK_EQ(uppers[i].type(), idx.type())
                << "We force all scalar types to be the same."
                << "idx.type() = " << idx.type()
