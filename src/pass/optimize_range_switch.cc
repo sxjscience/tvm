@@ -142,6 +142,14 @@ class RangeSwitchOpMerger final : public IRMutator {
 };
 
 
+class RangeSwitchSplitter final : public IRMutator {
+  public:
+    Stmt Mutate_(const Store* op, const Stmt& s) final {
+      return IRMutator::Mutate_(op, s);
+    }
+};
+
+
 class RangeSwitchRewriter final : public IRMutator {
   public:
     Expr Mutate_(const Call* op, const Expr& e) final {
