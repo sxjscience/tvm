@@ -154,6 +154,7 @@ class RangeSwitchRewriter final : public IRMutator {
           Expr upper = this->Mutate(op->args[i]);
           Expr value = this->Mutate(op->args[i + value_num - 1]);
           ret = if_then_else(idx < upper, value, ret);
+          std::cout << ret << std::endl;
         }
         return ret;
       } else {
