@@ -502,11 +502,11 @@ void RebaseNonZeroMinLoop(const Schedule& sch) {
   std::unordered_map<IterVar, IterVar> rebase_map;
   for (Stage s : sch->stages) {
     if (s->attach_type == kInlinedAlready) continue;
+
     auto root_iter_vars = s->op->root_iter_vars();
     ArrayNode* leaf_vars = s->leaf_iter_vars.CopyOnWrite();
     for (IterVar iv : root_iter_vars) {
       size_t idx = FindNodeRef(leaf_vars, iv);
-      std::cout << "iv = " << iv << " idx=" << idx << std::endl;
       auto it  = s->iter_var_attrs.find(iv);
       // don;t need to rebase path that are binded.
       if (it != s->iter_var_attrs.end() &&
