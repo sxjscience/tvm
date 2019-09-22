@@ -46,7 +46,7 @@ namespace ir {
 // This requires us to do the following rewriting:
 // - Rewrite allocation to use local memory.
 // - Rewrite store of warp memory to local store.
-// - Rewrite load of waro memory to local plus a shuffle.
+// - Rewrite load of warp memory to local plus a shuffle.
 //
 // Define a generic shuffle instrinsic warp_shuffle(data, warp_index).
 // We can use the following rewriting rule
