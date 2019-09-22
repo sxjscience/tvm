@@ -47,7 +47,7 @@ void FeatureVisitor::Visit_(const For *op) {
       ann = kVectorized;
       break;
     case ForType::RangeSplit:
-      ann = kRangeSplit;
+      CHECK(false) << "Do not support RangeSplit in AutoTVM";
       break;
     case ForType::Serial:
       ann = kSerial;
