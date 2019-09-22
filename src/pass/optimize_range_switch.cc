@@ -150,7 +150,7 @@ class RangeSwitchRewriter final : public IRMutator {
         CHECK_GT(value_num, 1);
         Expr ret = this->Mutate(op->args[2 * value_num - 1]); // Default value
         Expr idx = this->Mutate(op->args[0]);
-        for (int i = 1; i < value_num; i++) {
+        for (int i = value_num - 1; i >= 1; i--) {
           Expr upper = this->Mutate(op->args[i]);
           Expr value = this->Mutate(op->args[i + value_num - 1]);
           ret = if_then_else(idx < upper, value, ret);
