@@ -411,7 +411,7 @@ Stmt ScheduleOps(
     } else {
       CHECK_EQ(attach_spec->attach_type, kScope);
       CHECK(body.defined());
-      InjectAttach mutator(s, attach_spec, dom_map, debug_keep_trivial_loop);;
+      InjectAttach mutator(s, attach_spec, dom_map, debug_keep_trivial_loop);
       body = mutator.Mutate(body);
       CHECK(mutator.found_attach)
           << "did not find attachment point for " << s << " in "

@@ -80,6 +80,7 @@ class LoopUnroller : public IRMutator {
     auto_unroll = auto_unroll && (
         value * step_count_ <= auto_max_step_||
         value <= auto_max_extent_);
+
     if (op->for_type == ForType::Unrolled) {
       CHECK_GE(value, 0)
           << "Cannot unroll non-constant loop";
