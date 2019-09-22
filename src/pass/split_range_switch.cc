@@ -44,6 +44,7 @@ class RangeSwitchSelector final : public IRVisitor {
       }
     }
     void Visit_(const For* op) {
+      std::cout << op->extent << std::endl;
       std::cout << static_cast<int>(op->for_type) << std::endl;
       if (op->for_type == ForType::RangeSplit) {
         std::cout << "For!" << std::endl;
@@ -60,7 +61,6 @@ class RangeSwitchSplitter final : public IRMutator {
 };
 
 Stmt SplitRangeSwitch(Stmt stmt) {
-  std::cout << stmt << std::endl;
   RangeSwitchSelector selector;
   selector.Visit(stmt);
   std::cout << selector.call_record_.size() << std::endl;
