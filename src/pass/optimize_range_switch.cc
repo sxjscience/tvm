@@ -147,10 +147,13 @@ class RangeSwitchRewriter final : public IRMutator {
     Expr Mutate_(const Call* op, const Expr& e) final {
       if (op->is_intrinsic(intrinsic::tvm_range_switch)) {
         int value_num = op->args.size() / 2;
-        Expr ret = op->args[2 * value_num - 1]; // Default value
-        Expr idx = op->args[0];
+        CHECK_GT(value_num, 1);
+        Expr ret = this->Mutate(op->args[2 * value_num - 1]); // Default value
+        Expr idx = this->Mutate(op->args[0]);
         for (int i = 1; i < value_num; i++) {
-          ret = if_then_else(idx < op->args[i], op->args[i + value_num - 1], ret);
+          Expr upper = this->Mutate(op->args[i]);
+          Expr value = this->Mutate(op->args[i + value_num - 1]);
+          ret = if_then_else(idx < upper, value, ret);
         }
         return ret;
       } else {
