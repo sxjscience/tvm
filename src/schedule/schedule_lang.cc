@@ -400,13 +400,6 @@ Stage& Stage::parallel(IterVar var) {   // NOLINT(*)
 }
 
 Stage& Stage::range_split(IterVar var) {   // NOLINT(*)
-  CHECK(var->iter_type == kDataPar ||
-        var->iter_type == kOpaque ||
-        var->iter_type == kUnrolled ||
-        var->iter_type == kVectorized ||
-        var->iter_type == kTensorized ||
-        var->iter_type == kParallelized)
-    << "Cannot range_split on " << IterVarType2String(var->iter_type);
   SetAttrIterType(operator->(), var, kRangeSplit);
   return *this;
 }
