@@ -133,6 +133,8 @@ REGISTER_PASS(VectorizeLoop);
 REGISTER_PASS(SkipVectorize);
 REGISTER_PASS(UnrollLoop);
 REGISTER_PASS(SplitRangeSwitch);
+REGISTER_PASS(PushOpInsideRangeSwitch);
+REGISTER_PASS(RewriteRangeSwitch);
 REGISTER_PASS(InjectCopyIntrin);
 REGISTER_PASS(ThreadSync);
 REGISTER_PASS(MakeAPI);

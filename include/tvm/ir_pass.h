@@ -262,11 +262,25 @@ Stmt VectorizeLoop(Stmt stmt);
 Stmt SkipVectorize(Stmt stmt);
 
 /*!
+ * \brief Push the binary operators and cast inside tvm_range_switch
+ * \param stmt The statement to be optimized.
+ * \return Transformed stmt.
+ */
+Stmt PushOpInsideRangeSwitch(Stmt stmt);
+
+/*!
  * \brief Split the inner loop variables that are denoted as range_switch
  * \param stmt The statement to be optimized.
  * \return Transformed stmt.
  */
 Stmt SplitRangeSwitch(Stmt stmt);
+
+/*!
+ * \brief Rewrite the intrinsic tvm_range_switch by if_then_else
+ * \param stmt The statement to be optimized.
+ * \return Transformed stmt.
+ */
+Stmt RewriteRangeSwitch(Stmt stmt);
 
 /*!
 * \brief instruments bound checkers.
