@@ -46,10 +46,6 @@ class LoopUnroller : public IRMutator {
   }
 
   Stmt Mutate_(const AttrStmt* op, const Stmt& stmt) final {
-    std::cout << "AttrStmt op=" << op->value << std::endl;
-    std::cout << "op.body:" << op->body << std::endl;
-    int tmp;
-    std::cin >> tmp;
     if (op->attr_key == "pragma_auto_unroll_max_step") {
       int value = 0;
       CHECK(arith::GetConstInt(op->value, &value));
@@ -84,7 +80,6 @@ class LoopUnroller : public IRMutator {
     auto_unroll = auto_unroll && (
         value * step_count_ <= auto_max_step_||
         value <= auto_max_extent_);
-
     if (op->for_type == ForType::Unrolled) {
       CHECK_GE(value, 0)
           << "Cannot unroll non-constant loop";
