@@ -16,65 +16,65 @@
 # under the License.
 # pylint: disable=wildcard-import, redefined-builtin, invalid-name
 """The Relay IR namespace containing the IR definition and compiler."""
-from __future__ import absolute_import
 import os
 from sys import setrecursionlimit
-from ..api import register_func
+
 from . import base
 from . import ty
 from . import expr
+from . import function
+from . import type_functor
 from . import expr_functor
-from . import module
 from . import adt
-from . import analysis
-from . import transform
-from .build_module import build, create_executor
-from .transform import build_config
 from . import prelude
+from . import loops
+from . import scope_builder
 from . import parser
+
+from . import transform
+from . import analysis
+from .build_module import build, create_executor, optimize
+from .transform import build_config
 from . import debug
 from . import param_dict
-from . import feature
 from .backend import vm
-from .backend import profiler_vm
-from .backend import serializer
-from .backend import deserializer
-from .backend import vmobj
 
 # Root operators
-from .op import Op
+from .op import nn
+from .op import image
+from .op import annotation
+from .op import vision
+from .op import contrib
 from .op.reduce import *
 from .op.tensor import *
 from .op.transform import *
 from .op.algorithm import *
-from . import nn
-from . import annotation
-from . import vision
-from . import contrib
-from . import image
 from . import frontend
 from . import backend
 from . import quantize
+from . import data_dep_optimization
 
 # Dialects
 from . import qnn
 
 from .scope_builder import ScopeBuilder
 
+# Load Memory Passes
+from .transform import memory_alloc
+from .transform import memory_plan
+
 # Required to traverse large programs
 setrecursionlimit(10000)
 
 # Span
 Span = base.Span
-
-# Env
-Module = module.Module
+SourceName = base.SourceName
 
 # Type
 Type = ty.Type
 TupleType = ty.TupleType
 TensorType = ty.TensorType
-Kind = ty.Kind
+TypeKind = ty.TypeKind
 TypeVar = ty.TypeVar
 ShapeVar = ty.ShapeVar
 TypeConstraint = ty.TypeConstraint
@@ -88,12 +88,12 @@ TypeCall = ty.TypeCall
 Any = ty.Any
 
 # Expr
-Expr = expr.Expr
+Expr = expr.RelayExpr
 Constant = expr.Constant
 Tuple = expr.Tuple
 Var = expr.Var
 GlobalVar = expr.GlobalVar
-Function = expr.Function
+Function = function.Function
 Call = expr.Call
 Let = expr.Let
 If = expr.If
@@ -103,6 +103,7 @@ RefRead = expr.RefRead
 RefWrite = expr.RefWrite
 
 # ADT
+Pattern = adt.Pattern
 PatternWildcard = adt.PatternWildcard
 PatternVar = adt.PatternVar
 PatternConstructor = adt.PatternConstructor
@@ -116,14 +117,22 @@ Match = adt.Match
 var = expr.var
 const = expr.const
 bind = expr.bind
-module_pass = transform.module_pass
-function_pass = transform.function_pass
-alpha_equal = analysis.alpha_equal
+
+# TypeFunctor
+TypeFunctor = type_functor.TypeFunctor
+TypeVisitor = type_functor.TypeVisitor
+TypeMutator = type_functor.TypeMutator
 
 # ExprFunctor
 ExprFunctor = expr_functor.ExprFunctor
 ExprVisitor = expr_functor.ExprVisitor
 ExprMutator = expr_functor.ExprMutator
+
+# Prelude
+Prelude = prelude.Prelude
+
+# Scope builder
+ScopeBuilder = scope_builder.ScopeBuilder
 
 # Parser
 fromtext = parser.fromtext
@@ -131,14 +140,3 @@ fromtext = parser.fromtext
 # Param Serialization
 save_param_dict = param_dict.save_param_dict
 load_param_dict = param_dict.load_param_dict
-
-# Pass manager
-PassInfo = transform.PassInfo
-PassContext = transform.PassContext
-Pass = transform.Pass
-ModulePass = transform.ModulePass
-FunctionPass = transform.FunctionPass
-Sequential = transform.Sequential
-
-# Feature
-Feature = feature.Feature

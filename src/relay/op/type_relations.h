@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -18,7 +18,6 @@
  */
 
 /*!
- *  Copyright (c) 2018 by Contributors
  * \file tvm/relay/op/type_relations.h
  * \brief A set of utilities and common functionality
  * for type relations.
@@ -26,8 +25,9 @@
 #ifndef TVM_RELAY_OP_TYPE_RELATIONS_H_
 #define TVM_RELAY_OP_TYPE_RELATIONS_H_
 
-#include <tvm/relay/error.h>
+#include <tvm/ir/error.h>
 #include <tvm/relay/type.h>
+
 #include <string>
 
 namespace tvm {
@@ -41,9 +41,7 @@ namespace relay {
  * \param reporter The reporter.
  * \return true whether relation has been resolved.
  */
-bool IdentityRel(const Array<Type>& types,
-                 int num_inputs,
-                 const Attrs& attrs,
+bool IdentityRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                  const TypeReporter& reporter);
 
 /*!
@@ -56,9 +54,7 @@ bool IdentityRel(const Array<Type>& types,
  * \param reporter The reporter.
  * \return true whether relation has been resolved.
  */
-bool BroadcastRel(const Array<Type>& types,
-                  int num_inputs,
-                  const Attrs& attrs,
+bool BroadcastRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                   const TypeReporter& reporter);
 
 /*!
@@ -75,10 +71,13 @@ bool BroadcastRel(const Array<Type>& types,
  * \param reporter The reporter.
  * \return true whether relation has been resolved.
  */
-bool BroadcastCompRel(const Array<Type>& types,
-                      int num_inputs,
-                      const Attrs& attrs,
+bool BroadcastCompRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
                       const TypeReporter& reporter);
+
+bool IdentityCompRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
+                     const TypeReporter& reporter);
+
+Array<IndexExpr> RankShape(const Array<IndexExpr>& shape);
 
 }  // namespace relay
 }  // namespace tvm

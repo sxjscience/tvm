@@ -37,7 +37,7 @@ API Reference
 
    langref/index
    api/python/index
-   api_links
+   api/links
 
 Developer Guide
 ---------------
@@ -45,8 +45,13 @@ Developer Guide
    :maxdepth: 2
 
    dev/index
-   nnvm_top
 
+Frontends
+---------
+.. toctree::
+   :maxdepth: 1
+
+   frontend/tensorflow
 
 Index
 -----

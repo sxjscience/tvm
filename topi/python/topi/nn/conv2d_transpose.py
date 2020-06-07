@@ -16,24 +16,24 @@
 # under the License.
 # pylint: disable=invalid-name, unused-variable, unused-argument
 """Transposed 2D convolution operators (sometimes called Deconvolution)."""
-from __future__ import absolute_import as _abs
 import tvm
+from tvm import te
+from tvm import relay
 from .dilate import dilate
 from .pad import pad
 from .util import get_pad_tuple
 from ..util import simplify
 
 
-@tvm.target.generic_func
 def conv2d_transpose_nchw(Input, Filter, strides, padding, out_dtype):
     """Transposed 2D convolution nchw forward operator.
 
     Parameters
     ----------
-    Input : tvm.Tensor
+    Input : tvm.te.Tensor
         4-D with shape [batch, in_channel, in_height, in_width]
 
-    Filter : tvm.Tensor
+    Filter : tvm.te.Tensor
         4-D with shape [in_channel, num_filter, filter_height, filter_width]
 
     strides : tuple of two ints
@@ -47,7 +47,7 @@ def conv2d_transpose_nchw(Input, Filter, strides, padding, out_dtype):
 
     Returns
     -------
-    Output : tvm.Tensor
+    Output : tvm.te.Tensor
         4-D with shape [batch, out_channel, out_height, out_width]
     """
     return declaration_conv2d_transpose_impl(Input, Filter, strides, padding, out_dtype)
@@ -72,9 +72,9 @@ def conv2d_transpose_nchw_preprocess(data, kernel, strides, padding, out_dtype):
                    [0, 0, bpad_bottom, bpad_right], \
                    name='data_pad')
     # transform kernel layout from IOHW to OIHW, and rotate kernel by 180 degrees
-    kernel_transform = tvm.compute((out_c, in_c, filter_h, filter_w), \
-                                    lambda o, i, h, w: kernel[i][o][filter_h-1-h][filter_w-1-w], \
-                                    name='kernel_transform')
+    kernel_transform = te.compute((out_c, in_c, filter_h, filter_w), \
+                                  lambda o, i, h, w: kernel[i][o][filter_h-1-h][filter_w-1-w], \
+                                  name='kernel_transform')
     return data_pad, kernel_transform
 
 
@@ -90,15 +90,74 @@ def declaration_conv2d_transpose_impl(data, kernel, strides, padding, out_dtype)
     out_c = simplify(out_c)
     out_h = simplify(in_h - filter_h + 1)
     out_w = simplify(in_w - filter_w + 1)
-    dc = tvm.reduce_axis((0, in_c), name='dc')
-    dh = tvm.reduce_axis((0, filter_h), name='dh')
-    dw = tvm.reduce_axis((0, filter_w), name='dw')
+    dc = te.reduce_axis((0, in_c), name='dc')
+    dh = te.reduce_axis((0, filter_h), name='dh')
+    dw = te.reduce_axis((0, filter_w), name='dw')
 
-    Output = tvm.compute(
+    Output = te.compute(
         (batch, out_c, out_h, out_w),
-        lambda b, c, h, w: tvm.sum(
+        lambda b, c, h, w: te.sum(
             data_pad[b, dc, h+dh, w+dw].astype(out_dtype) *
             kernel_transform[c, dc, dh, dw].astype(out_dtype),
             axis=[dc, dh, dw]), tag="conv2d_transpose_nchw")
 
     return Output
+
+
+@tvm.target.generic_func
+def conv2d_transpose_legalize(attrs, inputs, types):
+    """Legalizes Transposed 2D convolution op.
+
+    Parameters
+    ----------
+    attrs : tvm.ir.Attrs
+        Attributes of current Transposed 2D convolution
+    inputs : list of tvm.relay.Expr
+        The args of the Relay expr to be legalized
+    types : list of types
+        List of input and output types
+
+    Returns
+    -------
+    result : tvm.relay.Expr
+        The legalized expr
+    """
+    if attrs['data_layout'] == 'NHWC':
+        data, kernel = inputs
+        kernel_layout = attrs['kernel_layout']
+        # Convert Kernel layout to IOHW
+        # kernel_layout is different from input kernel layout - IO is swapped
+        if kernel_layout == 'HWIO':
+            # input kernel layout is swapped to HWOI
+            # output kernel layout will be IOHW
+            kernel = relay.transpose(kernel, axes=(3, 2, 0, 1))
+        elif kernel_layout == 'HWOI':
+            # input kernel layout is swapped to HWIO
+            # output kernel layout will be IOHW
+            kernel = relay.transpose(kernel, axes=(2, 3, 0, 1))
+        elif kernel_layout == 'IOHW':
+            # input kernel layout is swapped to OIHW
+            # output kernel layout will be IOHW
+            kernel = relay.transpose(kernel, axes=(1, 0, 2, 3))
+        elif kernel_layout == 'OIHW':
+            # input kernel layout is swapped to IOHW
+            # output kernel layout will be IOHW
+            pass
+        else:
+            # Skip legalize. Let relay.nn.conv2d_transpose to handle the case
+            return None
+
+        # Set new attrs for conv2d_transpose.
+        new_attrs = {k: attrs[k] for k in attrs.keys()}
+        new_attrs['data_layout'] = 'NCHW'
+        # layout of kernel should be IOHW, but kernel_layout should be swapped - OIHW
+        new_attrs['kernel_layout'] = 'OIHW'
+
+        # Convert data to NCHW.
+        data = relay.transpose(data, axes=(0, 3, 1, 2))
+        deconv = relay.nn.conv2d_transpose(data, kernel, **new_attrs)
+        # Convert back to original NHWC layout.
+        out = relay.transpose(deconv, axes=(0, 2, 3, 1))
+        return out
+
+    return None

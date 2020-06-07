@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -18,11 +18,11 @@
  */
 
 /*!
- *  Copyright (c) 2017 by Contributors
  * \file tvm_runtime.h
  * \brief Pack all tvm runtime source files
  */
 #include <sys/stat.h>
+
 #include <fstream>
 
 /* Enable custom logging - this will cause TVM to pass every log message
@@ -39,22 +39,23 @@
 
 #include "../src/runtime/c_runtime_api.cc"
 #include "../src/runtime/cpu_device_api.cc"
-#include "../src/runtime/workspace_pool.cc"
-#include "../src/runtime/module_util.cc"
-#include "../src/runtime/system_lib_module.cc"
-#include "../src/runtime/module.cc"
-#include "../src/runtime/registry.cc"
+#include "../src/runtime/dso_library.cc"
 #include "../src/runtime/file_util.cc"
-#include "../src/runtime/dso_module.cc"
-#include "../src/runtime/rpc/rpc_session.cc"
+#include "../src/runtime/graph/graph_runtime.cc"
+#include "../src/runtime/library_module.cc"
+#include "../src/runtime/module.cc"
+#include "../src/runtime/ndarray.cc"
+#include "../src/runtime/object.cc"
+#include "../src/runtime/registry.cc"
 #include "../src/runtime/rpc/rpc_event_impl.cc"
-#include "../src/runtime/rpc/rpc_server_env.cc"
 #include "../src/runtime/rpc/rpc_module.cc"
+#include "../src/runtime/rpc/rpc_server_env.cc"
+#include "../src/runtime/rpc/rpc_session.cc"
 #include "../src/runtime/rpc/rpc_socket_impl.cc"
+#include "../src/runtime/system_library.cc"
 #include "../src/runtime/thread_pool.cc"
 #include "../src/runtime/threading_backend.cc"
-#include "../src/runtime/graph/graph_runtime.cc"
-#include "../src/runtime/ndarray.cc"
+#include "../src/runtime/workspace_pool.cc"
 
 #ifdef TVM_OPENCL_RUNTIME
 #include "../src/runtime/opencl/opencl_device_api.cc"
@@ -66,9 +67,8 @@
 #endif
 
 #ifdef USE_SORT
-#include "../src/contrib/sort/sort.cc"
+#include "../src/runtime/contrib/sort/sort.cc"
 #endif
-
 
 #include <android/log.h>
 

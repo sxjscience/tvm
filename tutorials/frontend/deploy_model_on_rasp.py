@@ -27,6 +27,7 @@ it on Raspberry Pi.
 """
 
 import tvm
+from tvm import te
 import tvm.relay as relay
 from tvm import rpc
 from tvm.contrib import util, graph_runtime as runtime
@@ -52,7 +53,7 @@ from tvm.contrib.download import download_testdata
 #
 # .. code-block:: bash
 #
-#   git clone --recursive https://github.com/dmlc/tvm
+#   git clone --recursive https://github.com/apache/incubator-tvm tvm
 #   cd tvm
 #   mkdir build
 #   cp cmake/config.cmake build
@@ -178,7 +179,7 @@ else:
     # The above line is a simple form of
     # target = tvm.target.create('llvm -device=arm_cpu -model=bcm2837 -target=armv7l-linux-gnueabihf -mattr=+neon')
 
-with relay.build_config(opt_level=3):
+with tvm.transform.PassContext(opt_level=3):
     graph, lib, params = relay.build(func, target, params=params)
 
 # After `relay.build`, you will get three return values: graph,

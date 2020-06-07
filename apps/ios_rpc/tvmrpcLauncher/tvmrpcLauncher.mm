@@ -18,7 +18,6 @@
  */
 
 /*!
- *  Copyright (c) 2017 by Contributors
  * \brief A hook to launch RPC server via xcodebuild test
  * \file tvmrpcLauncher.mm
  */
@@ -33,16 +32,15 @@
 @implementation tvmrpcLauncher
 
 - (void)setUp {
-    [super setUp];
+  [super setUp];
 }
 
 - (void)tearDown {
-    [super tearDown];
+  [super tearDown];
 }
 
 - (void)testRPC {
   [TVMRuntime launchSyncServer];
 }
-
 
 @end

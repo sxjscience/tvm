@@ -14,6 +14,8 @@
 # KIND, either express or implied.  See the License for the
 # specific language governing permissions and limitations
 # under the License.
+
+# pylint: disable=import-outside-toplevel
 """Transform operators."""
 
 from . import _make
@@ -36,7 +38,7 @@ def cast(data, dtype):
     result : relay.Expr
         The casted result.
     """
-    from .. import _make as _relay_make
+    from .. import _ffi_api as _relay_make
     return _relay_make.cast(data, dtype)
 
 
@@ -53,7 +55,7 @@ def cast_like(data, dtype_like):
     result : relay.Expr
         The casted result.
     """
-    from .. import _make as _relay_make
+    from .. import _ffi_api as _relay_make
     return _relay_make.cast_like(data, dtype_like)
 
 
@@ -144,65 +146,62 @@ def squeeze(data, axis=None):
     """
     return _make.squeeze(data, axis)
 
-
 def reshape(data, newshape):
-    """Reshapes the input array.
-
-    Example::
+    """Reshape the input array.
 
     To give user more convenience in without doing manual shape inference,
     some dimensions of the shape can take special values from the set {0, -1, -2, -3, -4}.
     The significance of each is explained below:
 
-    - ``0``  copy this dimension from the input to the output shape.
+    ``0`` copy this dimension from the input to the output shape.
 
-    Example::
+        .. code-block:: python
 
-    - data.shape = (2,3,4), newshape = (4,0,2), result.shape = (4,3,2)
-    - data.shape = (2,3,4), newshape = (2,0,0), result.shape = (2,3,4)
+            data.shape = (2,3,4), newshape = (4,0,2), result.shape = (4,3,2)
+            data.shape = (2,3,4), newshape = (2,0,0), result.shape = (2,3,4)
 
-    - ``-1`` infers the dimension of the output shape by using the remainder of the input dimensions
-    keeping the size of the new array same as that of the input array.
+    ``-1`` infers the dimension of the output shape by using the remainder of
+    the input dimensions keeping the size of the new array same as that of the input array.
     At most one dimension of shape can be -1.
 
-    Example::
+        .. code-block:: python
 
-    - data.shape = (2,3,4), newshape = (6,1,-1), result.shape = (6,1,4)
-    - data.shape = (2,3,4), newshape = (3,-1,8), result.shape = (3,1,8)
-    - data.shape = (2,3,4), newshape = (-1,), result.shape = (24,)
+            data.shape = (2,3,4), newshape = (6,1,-1), result.shape = (6,1,4)
+            data.shape = (2,3,4), newshape = (3,-1,8), result.shape = (3,1,8)
+            data.shape = (2,3,4), newshape = (-1,), result.shape = (24,)
 
-    - ``-2`` copy all/remainder of the input dimensions to the output shape.
+    ``-2`` copy all/remainder of the input dimensions to the output shape.
 
-    Example::
+        .. code-block:: python
 
-    - data.shape = (2,3,4), newshape = (-2,), result.shape = (2,3,4)
-    - data.shape = (2,3,4), newshape = (2,-2), result.shape = (2,3,4)
-    - data.shape = (2,3,4), newshape = (-2,1,1), result.shape = (2,3,4,1,1)
+            data.shape = (2,3,4), newshape = (-2,), result.shape = (2,3,4)
+            data.shape = (2,3,4), newshape = (2,-2), result.shape = (2,3,4)
+            data.shape = (2,3,4), newshape = (-2,1,1), result.shape = (2,3,4,1,1)
 
-    - ``-3`` use the product of two consecutive dimensions of the input shape
+    ``-3`` use the product of two consecutive dimensions of the input shape
     as the output dimension.
 
-    Example::
+        .. code-block:: python
 
-    - data.shape = (2,3,4), newshape = (-3,4), result.shape = (6,4)
-    - data.shape = (2,3,4,5), newshape = (-3,-3), result.shape = (6,20)
-    - data.shape = (2,3,4), newshape = (0,-3), result.shape = (2,12)
-    - data.shape = (2,3,4), newshape = (-3,-2), result.shape = (6,4)
+            data.shape = (2,3,4), newshape = (-3,4), result.shape = (6,4)
+            data.shape = (2,3,4,5), newshape = (-3,-3), result.shape = (6,20)
+            data.shape = (2,3,4), newshape = (0,-3), result.shape = (2,12)
+            data.shape = (2,3,4), newshape = (-3,-2), result.shape = (6,4)
 
-    - ``-4`` split one dimension of the input into two dimensions passed subsequent
+    ``-4`` split one dimension of the input into two dimensions passed subsequent
     to -4 in shape (can contain -1).
 
-    Example::
+        .. code-block:: python
 
-    - data.shape = (2,3,4), newshape = (-4,1,2,-2), result.shape = (1,2,3,4)
-    - data.shape = (2,3,4), newshape = (2,-4,-1,3,-2), result.shape = (2,1,3,4)
+            data.shape = (2,3,4), newshape = (-4,1,2,-2), result.shape = (1,2,3,4)
+            data.shape = (2,3,4), newshape = (2,-4,-1,3,-2), result.shape = (2,1,3,4)
 
     Parameters
     ----------
     data : relay.Expr
         The input data to the operator.
 
-    newshape : Union[int, Tuple[int], List[int]]
+    newshape : Union[int, Tuple[int], List[int]] or relay.Expr
         The new shape. Should be compatible with the original shape.
 
     Returns
@@ -211,9 +210,33 @@ def reshape(data, newshape):
         The reshaped result.
     """
     if isinstance(newshape, int):
-        newshape = [newshape]
-    return _make.reshape(data, list(newshape))
+        newshape = const([newshape])
+    if isinstance(newshape, (tuple, list)):
+        newshape = const(list(newshape))
+    return _make.reshape(data, newshape)
 
+def argwhere(condition):
+    """Find the indices of elements of a tensor that are
+    non-zero.
+
+    Parameters
+    ----------
+    condition : relay.Expr
+        The input condition tensor.
+
+    Returns
+    -------
+    out : relay.Expr
+        Tensor with the indices of elements that are non-zero.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        condition = [[True, False], [False, True]]
+        relay.argwhere(condition) = [[0, 0], [1, 1]]
+    """
+    return _make.argwhere(condition)
 
 def reshape_like(data, shape_like):
     """Reshapes the input array by the size of another array.
@@ -276,7 +299,7 @@ def full(fill_value, shape=(), dtype=""):
     fill_value : relay.Expr
         The value to fill. Must be a scalar.
 
-    shape : tuple of int
+    shape : tuple of int or relay.Expr
         The shape of the target.
 
     dtype : data type, optional (defaults to data type of the fill value)
@@ -287,6 +310,8 @@ def full(fill_value, shape=(), dtype=""):
     result : relay.Expr
         The resulting tensor.
     """
+    if isinstance(shape, (list, tuple)):
+        shape = const(list(shape), "int32")
     return _make.full(fill_value, shape, dtype)
 
 
@@ -398,12 +423,6 @@ def tile(data, reps):
     reps : tuple of int
         The number of times repeating the tensor data.
 
-    .. note::
-        Each dim size of reps must be a positive integer. If reps has length d,
-        the result will have dimension of max(d, data.ndim); If data.ndim < d,
-        data is promoted to be d-dimensional by prepending new axes.
-        If data.ndim >=  d, reps is promoted to a.ndim by pre-pending 1's to it.
-
     Returns
     -------
     ret : relay.Expr
@@ -421,6 +440,13 @@ def tile(data, reps):
 
         relay.tile(x, reps=(2,)) = [[1., 2., 1., 2.],
                                     [3., 4., 3., 4.]]
+
+    Notes
+    -----
+    Each dim size of reps must be a positive integer. If reps has length d,
+    the result will have dimension of max(d, data.ndim); If data.ndim < d,
+    data is promoted to be d-dimensional by prepending new axes.
+    If data.ndim >=  d, reps is promoted to a.ndim by pre-pending 1's to it.
     """
 
     return _make.tile(data, reps)
@@ -478,7 +504,7 @@ def where(condition, x, y):
     Returns
     -------
     result : relay.Expr
-		The selected array.
+        The selected array.
 
     Examples
     --------
@@ -503,7 +529,7 @@ def broadcast_to(data, shape):
     data : relay.Expr
         The input tensor.
 
-    shape : shape
+    shape : tuple of int or relay.Expr
         Provide the shape to broadcast to.
 
     Returns
@@ -511,6 +537,8 @@ def broadcast_to(data, shape):
     result : relay.Expr
         The resulting tensor.
     """
+    if isinstance(shape, (list, tuple)):
+        shape = const(list(shape), "int32")
     return _make.broadcast_to(data, shape)
 
 def broadcast_to_like(data, broadcast_type):
@@ -610,6 +638,36 @@ def strided_slice(data, begin, end, strides=None):
     return _make.strided_slice(data, list(begin), list(end), list(strides))
 
 
+def strided_set(data, v, begin, end, strides=None):
+    """Strided set of an array.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The source array to be sliced.
+
+    v : relay.Expr
+        The data to be set.
+
+    begin: relay.Expr
+        The indices to begin with in the slicing.
+
+    end: relay.Expr
+        Indices indicating end of the slice.
+
+    strides: relay.Expr, optional
+        Specifies the stride values, it can be negative in that case,
+        the input tensor will be reversed in that particular axis.
+
+    Returns
+    -------
+    ret : relay.Expr
+        The computed result.
+    """
+    strides = strides or const([1], dtype="int32")
+    return _make.strided_set(data, v, begin, end, strides)
+
+
 def slice_like(data, shape_like, axes=None):
     """Slice the first input with respect to the second input.
 
@@ -662,14 +720,14 @@ def reverse_reshape(data, newshape):
     """Reshapes the input array where the special values are inferred from
     right to left.
 
-    Example::
-
     The special values have the same semantics as :py:class:`tvm.relay.reshape`.
     The difference is that special values are inferred from right to left. It
-    can be explained in the example below::
+    can be explained in the example below.
 
-    - data.shape = (10,5,4), newshape = (-1,0), reshape results in (40,5)
-    - data.shape = (10,5,4), newshape = (-1,0), reverse_reshape results in (40,5)
+    .. code-block:: python
+
+        data.shape = (10,5,4), newshape = (-1,0), reshape results in (40,5)
+        data.shape = (10,5,4), newshape = (-1,0), reverse_reshape results in (40,5)
 
     Parameters
     ----------
@@ -809,3 +867,57 @@ def one_hot(indices, on_value, off_value, depth, axis, dtype):
              [0, 0, 1]]
     """
     return _make.one_hot(indices, on_value, off_value, depth, axis, dtype)
+
+
+def unravel_index(indices, shape):
+    """Convert a flat index or array of flat indices into a tuple of coordinate arrays.
+
+    Example::
+    -   unravel_index([22, 41, 37], [7, 6]) = [[3, 6, 6],[4, 5, 1]]
+
+    Parameters
+    ----------
+    indices : relay.Expr
+        An integer array containing indices.
+
+    shape : relay.Expr
+        The shape of the array.
+
+    Returns
+    -------
+    result : relay.Expr
+        The tuple of coordinate arrays.
+    """
+
+    return _make.unravel_index(indices, shape)
+
+def sparse_to_dense(sparse_indices, output_shape, sparse_values, default_value=0):
+    """Converts a sparse representation into a dense tensor.
+
+    Example::
+    -   sparse_to_dense([[0, 0], [1, 1]], [2, 2], [3, 3], 0) = [[3, 0], [0, 3]]
+
+    Parameters
+    ----------
+    sparse_indices : relay.Expr
+        A 0-D, 1-D, or 2-D tensor of integers containing location of sparse values.
+
+    output_shape : relay.Expr
+        A list of integers. Shape of the dense output tensor.
+
+    sparse_values : relay.Expr
+        A 0-D or 1-D tensor containing the sparse values for the sparse indices.
+
+    default_value : relay.Expr
+        A 0-D tensor containing the default value for the remaining locations.
+        Defaults to 0.
+
+    Returns
+    -------
+    result : relay.Expr
+        Dense tensor of shape output_shape. Has the same type as sparse_values.
+    """
+
+    if default_value == 0:
+        default_value = const(0)
+    return _make.sparse_to_dense(sparse_indices, output_shape, sparse_values, default_value)

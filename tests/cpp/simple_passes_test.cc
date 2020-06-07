@@ -19,22 +19,21 @@
 
 #include <dmlc/logging.h>
 #include <gtest/gtest.h>
-#include <tvm/ir_pass.h>
-#include <tvm/operation.h>
+#include <tvm/te/operation.h>
+#include <tvm/tir/analysis.h>
 
 TEST(SimplePasses, HasSideEffect) {
   using namespace tvm;
-  auto n = var("n");
-  Array<Expr> shape;
+  auto n = te::var("n");
+  Array<PrimExpr> shape;
   shape.push_back(n);
 
-  auto A = placeholder(shape, Float(32), "A");
+  auto A = te::placeholder(shape, DataType::Float(32), "A");
 
-  CHECK(!tvm::ir::HasSideEffect(A[0]));
+  CHECK(!tvm::tir::HasSideEffect(A[0]));
 }
 
-
-int main(int argc, char ** argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   testing::FLAGS_gtest_death_test_style = "threadsafe";
   return RUN_ALL_TESTS();

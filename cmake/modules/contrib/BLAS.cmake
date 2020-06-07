@@ -16,7 +16,7 @@
 # under the License.
 
 # Plugin rules for cblas
-file(GLOB CBLAS_CONTRIB_SRC src/contrib/cblas/*.cc)
+file(GLOB CBLAS_CONTRIB_SRC src/runtime/contrib/cblas/*.cc)
 
 if(USE_BLAS STREQUAL "openblas")
   find_library(BLAS_LIBRARY openblas)
@@ -54,4 +54,29 @@ elseif(USE_BLAS STREQUAL "none")
   # pass
 else()
   message(FATAL_ERROR "Invalid option: USE_BLAS=" ${USE_BLAS})
+endif()
+
+if(IS_DIRECTORY ${USE_MKLDNN})
+  find_library(MKLDNN_LIBRARY NAMES dnnl HINTS ${USE_MKLDNN}/lib/)
+  if (MKLDNN_LIBRARY STREQUAL "MKLDNN_LIBRARY-NOTFOUND")
+    message(WARNING "Cannot find MKLDNN library at ${USE_MKLDNN}.")
+  else()
+    include_directories(${USE_MKLDNN}/include)
+    list(APPEND TVM_RUNTIME_LINKER_LIBS ${MKLDNN_LIBRARY})
+    add_definitions(-DUSE_DNNL=1)
+    message(STATUS "Use MKLDNN library " ${MKLDNN_LIBRARY})
+  endif()
+elseif(USE_MKLDNN STREQUAL "ON")
+  find_library(MKLDNN_LIBRARY dnnl)
+  if (MKLDNN_LIBRARY STREQUAL "MKLDNN_LIBRARY-NOTFOUND")
+    message(WARNING "Cannot find MKLDNN library. Try to specify the path to MKLDNN library.")
+  else()
+    list(APPEND TVM_RUNTIME_LINKER_LIBS ${MKLDNN_LIBRARY})
+    add_definitions(-DUSE_DNNL=1)
+    message(STATUS "Use MKLDNN library " ${MKLDNN_LIBRARY})
+  endif()
+elseif(USE_MKLDNN STREQUAL "OFF")
+  # pass
+else()
+  message(FATAL_ERROR "Invalid option: USE_MKLDNN=" ${USE_MKLDNN})
 endif()

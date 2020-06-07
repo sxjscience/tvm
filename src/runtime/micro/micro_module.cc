@@ -18,19 +18,20 @@
  */
 
 /*!
-*  Copyright (c) 2019 by Contributors
-* \file micro_module.cc
-*/
+ * \file micro_module.cc
+ */
 
-#include <tvm/runtime/registry.h>
 #include <tvm/runtime/c_runtime_api.h>
 #include <tvm/runtime/module.h>
-#include <unordered_map>
+#include <tvm/runtime/registry.h>
+
 #include <string>
-#include "micro_session.h"
+#include <unordered_map>
+
+#include "../pack_args.h"
 #include "low_level_device.h"
 #include "micro_common.h"
-#include "../pack_args.h"
+#include "micro_session.h"
 
 namespace tvm {
 namespace runtime {
@@ -43,84 +44,67 @@ class MicroModuleNode final : public ModuleNode {
 
   ~MicroModuleNode() {}
 
-  const char* type_key() const final {
-    return "micro";
-  }
+  const char* type_key() const final { return "micro"; }
 
-  PackedFunc GetFunction(const std::string& name,
-                         const std::shared_ptr<ModuleNode>& sptr_to_self) final;
+  PackedFunc GetFunction(const std::string& name, const ObjectPtr<Object>& sptr_to_self) final;
 
   /*!
    * \brief initializes module by establishing device connection and loads binary
    * \param binary_path path of the binary to be loaded
    */
   void InitMicroModule(const std::string& binary_path) {
+    // std::cout << "[MicroModuleNode::InitMicroModule]" << std::endl;
+    // std::cout << "  start" << std::endl;
     session_ = MicroSession::Current();
-    binary_path_ = binary_path;
-    binary_info_ = session_->LoadBinary(binary_path_);
-  }
-
-  /*!
-   * \brief runs selected function on the micro device
-   * \param func_name name of the function to be run
-   * \param func_offset offset of the function to be run
-   * \param args type-erased arguments passed to the function
-   */
-  void RunFunction(const std::string& func_name, DevBaseOffset func_offset, const TVMArgs& args) {
-    session_->PushToExecQueue(func_offset, args);
+    symbol_map_ = session_->LoadBinary(binary_path, true).symbol_map;
   }
 
  private:
-  /*! \brief module binary info */
-  BinaryInfo binary_info_;
-  /*! \brief path to module binary */
-  std::string binary_path_;
+  SymbolMap symbol_map_;
   /*! \brief global session pointer */
-  std::shared_ptr<MicroSession> session_;
+  ObjectPtr<MicroSession> session_;
 };
 
 class MicroWrappedFunc {
  public:
-  MicroWrappedFunc(MicroModuleNode* m,
-                   std::shared_ptr<MicroSession> session,
-                   const std::string& func_name,
-                   DevBaseOffset func_offset) {
-    m_ = m;
+  MicroWrappedFunc(ObjectPtr<MicroSession> session, TargetPtr func_ptr) {
     session_ = session;
-    func_name_ = func_name;
-    func_offset_ = func_offset;
+    func_ptr_ = func_ptr;
   }
 
   void operator()(TVMArgs args, TVMRetValue* rv) const {
-    m_->RunFunction(func_name_, func_offset_, args);
+    session_->PushToTaskQueue(func_ptr_, args);
   }
 
  private:
-  /*! \brief internal module */
-  MicroModuleNode* m_;
   /*! \brief reference to the session for this function (to keep the session alive) */
-  std::shared_ptr<MicroSession> session_;
-  /*! \brief name of the function */
-  std::string func_name_;
+  ObjectPtr<MicroSession> session_;
   /*! \brief offset of the function to be called */
-  DevBaseOffset func_offset_;
+  TargetPtr func_ptr_;
 };
 
-PackedFunc MicroModuleNode::GetFunction(
-    const std::string& name,
-    const std::shared_ptr<ModuleNode>& sptr_to_self) {
-  DevBaseOffset func_offset =
-      session_->low_level_device()->ToDevOffset(binary_info_.symbol_map[name]);
-  MicroWrappedFunc f(this, session_, name, func_offset);
+PackedFunc MicroModuleNode::GetFunction(const std::string& name,
+                                        const ObjectPtr<Object>& sptr_to_self) {
+  TargetPtr func_ptr;
+  if (name == tvm::runtime::symbol::tvm_module_main) {
+    if (symbol_map_.HasSymbol(tvm::runtime::symbol::tvm_module_main)) {
+      func_ptr = symbol_map_[tvm::runtime::symbol::tvm_module_main];
+    } else {
+      func_ptr = symbol_map_["default_function"];
+    }
+  } else {
+    func_ptr = symbol_map_[name];
+  }
+  MicroWrappedFunc f(session_, func_ptr);
   return PackedFunc(f);
 }
 
 // register loadfile function to load module from Python frontend
-TVM_REGISTER_GLOBAL("module.loadfile_micro_dev")
-.set_body([](TVMArgs args, TVMRetValue* rv) {
-    std::shared_ptr<MicroModuleNode> n = std::make_shared<MicroModuleNode>();
-    n->InitMicroModule(args[0]);
-    *rv = runtime::Module(n);
+TVM_REGISTER_GLOBAL("runtime.module.loadfile_micro_dev")
+    .set_body([](TVMArgs args, TVMRetValue* rv) {
+      auto n = make_object<MicroModuleNode>();
+      n->InitMicroModule(args[0]);
+      *rv = runtime::Module(n);
     });
 }  // namespace runtime
 }  // namespace tvm

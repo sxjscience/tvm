@@ -25,6 +25,7 @@ import sys
 import numpy as np
 
 import tvm
+from tvm import te
 from tvm import relay
 from tvm.relay import testing
 from tvm.contrib import graph_runtime, cc
@@ -60,7 +61,7 @@ def build(target_dir):
     if args.pretrained:
         # needs mxnet installed
         from mxnet.gluon.model_zoo.vision import get_model
-        
+
         # if `--pretrained` is enabled, it downloads a pretrained
         # resnet18 trained on imagenet1k dataset for image classification task
         block = get_model('resnet18_v1', pretrained=True)
@@ -74,8 +75,8 @@ def build(target_dir):
             num_layers=18, batch_size=batch_size, image_shape=image_shape)
 
     # compile the model
-    with relay.build_config(opt_level=opt_level):
-            graph, lib, params = relay.build_module.build(net, target, params=params)
+    with tvm.transform.PassContext(opt_level=opt_level):
+        graph, lib, params = relay.build_module.build(net, target, params=params)
 
     # save the model artifacts
     lib.save(deploy_lib)
@@ -111,7 +112,7 @@ def download_img_labels():
 def test_build(build_dir):
     """ Sanity check with random input"""
     graph = open(osp.join(build_dir, "deploy_graph.json")).read()
-    lib = tvm.module.load(osp.join(build_dir, "deploy_lib.so"))
+    lib = tvm.runtime.load(osp.join(build_dir, "deploy_lib.so"))
     params = bytearray(open(osp.join(build_dir,"deploy_param.params"), "rb").read())
     input_data = tvm.nd.array(np.random.uniform(size=data_shape).astype("float32"))
     ctx = tvm.cpu()

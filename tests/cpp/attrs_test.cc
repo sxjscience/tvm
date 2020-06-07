@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -19,8 +19,9 @@
 
 #include <dmlc/logging.h>
 #include <gtest/gtest.h>
-#include <tvm/attrs.h>
-#include <tvm/ir.h>
+#include <tvm/ir/attrs.h>
+#include <tvm/tir/expr.h>
+#include <tvm/tir/op.h>
 
 namespace tvm {
 namespace test {
@@ -28,32 +29,26 @@ namespace test {
 struct TestAttrs : public AttrsNode<TestAttrs> {
   int axis;
   std::string name;
-  Expr expr;
+  PrimExpr expr;
   double learning_rate;
 
   TVM_DECLARE_ATTRS(TestAttrs, "attrs.cpptest.TestAttrs") {
-    TVM_ATTR_FIELD(axis)
-        .set_default(10)
-        .set_lower_bound(1)
-        .set_upper_bound(10)
-        .describe("axis field");
-    TVM_ATTR_FIELD(name)
-        .describe("name of the field");
+    TVM_ATTR_FIELD(axis).set_default(10).set_lower_bound(1).set_upper_bound(10).describe(
+        "axis field");
+    TVM_ATTR_FIELD(name).describe("name of the field");
     TVM_ATTR_FIELD(expr)
         .describe("expression field")
-        .set_default(make_const(Int(32), 1));
-    TVM_ATTR_FIELD(learning_rate)
-        .describe("learning_rate")
-        .set_default(0.1);
+        .set_default(tir::make_const(DataType::Int(32), 1));
+    TVM_ATTR_FIELD(learning_rate).describe("learning_rate").set_default(0.1);
   }
 };
-}
-}
+}  // namespace test
+}  // namespace tvm
 
 TEST(Attrs, Basic) {
   using namespace tvm;
   using namespace tvm::test;
-  std::shared_ptr<TestAttrs> n = std::make_shared<TestAttrs>();
+  ObjectPtr<TestAttrs> n = make_object<TestAttrs>();
   try {
     n->InitBySeq("axis", 10);
     LOG(FATAL) << "bad";
@@ -70,25 +65,24 @@ TEST(Attrs, Basic) {
     LOG(FATAL) << "bad";
   } catch (const tvm::AttrError& e) {
     std::string what = e.what();
-    CHECK(what.find("expr : Expr, default=1") != std::string::npos);
+    CHECK(what.find("expr : PrimExpr, default=1") != std::string::npos);
     CHECK(what.find("axisx") != std::string::npos);
   }
-  n->InitBySeq("learning_rate", Expr(1), "expr", 128, "name", "xx");
+  n->InitBySeq("learning_rate", PrimExpr(1), "expr", 128, "name", "xx");
   CHECK_EQ(n->learning_rate, 1.0);
 
   n->InitBySeq("name", "xxx", "expr", 128);
   CHECK_EQ(n->name, "xxx");
   CHECK_EQ(n->axis, 10);
-  CHECK_EQ(n->expr.as<tvm::ir::IntImm>()->value, 128);
+  CHECK_EQ(n->expr.as<tvm::tir::IntImmNode>()->value, 128);
   // Check docstring
   std::ostringstream os;
   n->PrintDocString(os);
-  LOG(INFO) << "docstring\n"<< os.str();
-  CHECK(os.str().find("expr : Expr, default=1") != std::string::npos);
+  LOG(INFO) << "docstring\n" << os.str();
+  CHECK(os.str().find("expr : PrimExpr, default=1") != std::string::npos);
 }
 
-
-int main(int argc, char ** argv) {
+int main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   testing::FLAGS_gtest_death_test_style = "threadsafe";
   return RUN_ALL_TESTS();

@@ -18,7 +18,7 @@
 # pylint: disable=redefined-builtin
 
 from . import _make
-from .tensor import sqrt
+from .tensor import sqrt, log, exp
 from .transform import squeeze
 from ..expr import Tuple, TupleWrapper
 
@@ -145,25 +145,77 @@ def all(data, axis=None, keepdims=False, exclude=False):
     --------
     .. code-block:: python
 
-    data = relay.Constant(tvm.nd.array([[[ True,  True,  True],
-                                         [ True,  True,  True],
-                                         [False,  True, False]],
-                                        [[ True, False, False],
-                                         [ True,  True, False],
-                                         [False,  True,  True]]]))
+        data = relay.Constant(tvm.nd.array([[[ True,  True,  True],
+                                           [ True,  True,  True],
+                                           [False,  True, False]],
+                                          [[ True, False, False],
+                                           [ True,  True, False],
+                                           [False,  True,  True]]]))
 
-    relay.all(data, axis=1)
-    # [[False,  True, False],
-    # [False, False, False]]
+        relay.all(data, axis=1)
+        # [[False,  True, False],
+        # [False, False, False]]
 
-    relay.all(data, axis=0)
-    # [[ True, False, False],
-    # [ True,  True, False],
-    # [False,  True, False]]
+        relay.all(data, axis=0)
+        # [[ True, False, False],
+        # [ True,  True, False],
+        # [False,  True, False]]
 
     """
     axis = [axis] if isinstance(axis, int) else axis
     return _make.all(data, axis, keepdims, exclude)
+
+
+def any(data, axis=None, keepdims=False, exclude=False):
+    """Computes the logical OR of boolean array elements over given axes.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input boolean tensor
+
+    axis : None or int or tuple of int
+        Axis or axes along which a sum is performed. The default, axis=None,
+        will sum all of the elements of the input array. If axis is
+        negative it counts from the last to the first axis.
+
+    keepdims : bool
+        If this is set to True, the axes which are reduced are left in the result as
+        dimensions with size one. With this option, the result will broadcast
+        correctly against the input array.
+
+    exclude : bool
+        If `exclude` is true, reduction will be performed on the axes that are
+        NOT in axis instead.
+
+    Returns
+    -------
+    result : relay.Expr
+        The computed result.
+
+    Examples
+    --------
+    .. code-block:: python
+
+        data = relay.Constant(tvm.nd.array([[[ True,  True,  True],
+                                            [ True,  True,  True],
+                                            [False,  True, False]],
+                                            [[ True, False, False],
+                                            [ True,  True, False],
+                                            [False,  True,  True]]]))
+
+        relay.any(data, axis=1)
+        # [[True, True, True],
+        # [True,  True, True]]
+
+        relay.any(data, axis=0)
+        # [[ True, True, True],
+        # [ True,  True, True],
+        # [False,  True, True]]
+
+    """
+    axis = [axis] if isinstance(axis, int) else axis
+    return _make.any(data, axis, keepdims, exclude)
 
 
 def max(data, axis=None, keepdims=False, exclude=False):
@@ -423,3 +475,40 @@ def prod(data, axis=None, keepdims=False, exclude=False):
     """
     axis = [axis] if isinstance(axis, int) else axis
     return _make.prod(data, axis, keepdims, exclude)
+
+
+def logsumexp(data, axis=None, keepdims=False):
+    """Compute the log of the sum of exponentials of input elements over given axes.
+
+       This function is more numerically stable than log(sum(exp(input))).
+       It avoids overflows caused by taking the exp of large inputs and underflows
+       caused by taking the log of small inputs.
+
+    Parameters
+    ----------
+    data : relay.Expr
+        The input data
+
+    axis : None or int or tuple of int
+        Axis or axes along which a standard deviation operation is performed.
+        The default, axis=None, will compute the log of the sum of exponentials of all elements
+        in the input array. If axis is negative it counts from the last to the first axis.
+
+    keepdims : bool
+        If this is set to True, the axes which are reduced are left in the result as dimensions
+        with size one.
+
+    Returns
+    -------
+    result : relay.Expr
+        The computed result.
+    """
+
+    axis = [axis] if isinstance(axis, int) else axis
+    max_x = max(data, axis, True)
+    exp_x = exp(data - max_x)
+    sum_x = sum(exp_x, axis, True)
+    out_x = log(sum_x) + max_x
+    if not keepdims:
+        out_x = squeeze(out_x, axis)
+    return out_x

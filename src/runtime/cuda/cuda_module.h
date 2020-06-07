@@ -6,9 +6,9 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
@@ -18,7 +18,6 @@
  */
 
 /*!
- *  Copyright (c) 2017 by Contributors
  * \file cuda_module.h
  * \brief Execution handling of CUDA kernels
  */
@@ -26,10 +25,12 @@
 #define TVM_RUNTIME_CUDA_CUDA_MODULE_H_
 
 #include <tvm/runtime/module.h>
+
 #include <memory>
-#include <vector>
 #include <string>
 #include <unordered_map>
+#include <vector>
+
 #include "../meta_data.h"
 
 namespace tvm {
@@ -46,11 +47,9 @@ static constexpr const int kMaxNumGPUs = 32;
  * \param fmap The map function information map of each function.
  * \param cuda_source Optional, cuda source file
  */
-Module CUDAModuleCreate(
-    std::string data,
-    std::string fmt,
-    std::unordered_map<std::string, FunctionInfo> fmap,
-    std::string cuda_source);
+Module CUDAModuleCreate(std::string data, std::string fmt,
+                        std::unordered_map<std::string, FunctionInfo> fmap,
+                        std::string cuda_source);
 }  // namespace runtime
 }  // namespace tvm
 #endif  // TVM_RUNTIME_CUDA_CUDA_MODULE_H_

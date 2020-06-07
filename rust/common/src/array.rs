@@ -97,7 +97,7 @@ pub struct TVMContext {
 impl<'a> From<&'a TVMContext> for DLContext {
     fn from(ctx: &'a TVMContext) -> Self {
         Self {
-            device_type: ctx.device_type as u32,
+            device_type: ctx.device_type as _,
             device_id: ctx.device_id as i32,
         }
     }
@@ -133,6 +133,7 @@ macro_rules! impl_dltensor_from_ndarray {
                     shape: arr.shape().as_ptr() as *const i64 as *mut i64,
                     strides: arr.strides().as_ptr() as *const isize as *mut i64,
                     byte_offset: 0,
+                    ..Default::default()
                 }
             }
         }

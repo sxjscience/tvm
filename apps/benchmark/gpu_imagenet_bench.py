@@ -23,10 +23,9 @@ import threading
 import numpy as np
 
 import tvm
-from tvm.contrib.util import tempdir
+from tvm import te
 import tvm.contrib.graph_runtime as runtime
-import nnvm.compiler
-import nnvm.testing
+from tvm import relay
 
 from util import get_network
 
@@ -34,9 +33,8 @@ from util import get_network
 def benchmark(network, target):
     net, params, input_shape, output_shape = get_network(network, batch_size=1)
 
-    with nnvm.compiler.build_config(opt_level=3):
-        graph, lib, params = nnvm.compiler.build(
-            net, target=target, shape={'data': input_shape}, params=params, dtype=dtype)
+    with tvm.transform.PassContext(opt_level=3):
+        graph, lib, params = relay.build(net, target=target, params=params)
 
     # create runtime
     ctx = tvm.context(str(target), 0)
@@ -56,15 +54,19 @@ if __name__ == "__main__":
     parser.add_argument("--network", type=str, choices=
                         ['resnet-18', 'resnet-34', 'resnet-50',
                          'vgg-16', 'vgg-19', 'densenet-121', 'inception_v3',
-                         'mobilenet', 'mobilenet_v2', 'squeezenet_v1.0', 'squeezenet_v1.1'],
+                         'mobilenet', 'squeezenet_v1.0', 'squeezenet_v1.1'],
                         help='The name of neural network')
+    parser.add_argument("--device", type=str,
+                        choices=['amd_apu'], default='amd_apu',
+                        help="The name of the test device. If your device is not listed in "
+                             "the choices list, pick the most similar one as argument.")
     parser.add_argument("--model", type=str,
-                        choices=['1080ti', 'titanx', 'tx2', 'gfx900'], default='1080ti',
+                        choices=['1080ti', 'titanx', 'tx2', 'gfx900', 'v1000'], default='1080ti',
                         help="The model of the test device. If your device is not listed in "
                              "the choices list, pick the most similar one as argument.")
     parser.add_argument("--repeat", type=int, default=600)
     parser.add_argument("--target", type=str,
-                        choices=['cuda', 'opencl', 'rocm', 'nvptx', 'metal'], default='cuda',
+                        choices=['cuda', 'opencl', 'rocm', 'nvptx', 'metal', 'vulkan'], default='cuda',
                         help="The tvm compilation target")
     parser.add_argument("--thread", type=int, default=1, help="The number of threads to be run.")
     args = parser.parse_args()
@@ -76,7 +78,7 @@ if __name__ == "__main__":
     else:
         networks = [args.network]
 
-    target = tvm.target.create('%s -model=%s' % (args.target, args.model))
+    target = tvm.target.create('%s -device=%s -model=%s' % (args.target, args.device, args.model))
 
     print("--------------------------------------------------")
     print("%-20s %-20s" % ("Network Name", "Mean Inference Time (std dev)"))

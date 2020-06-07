@@ -17,20 +17,21 @@
 # pylint: disable=import-self, invalid-name, unused-argument, too-many-lines, len-as-condition
 
 import tvm
+from tvm import te
 import numpy as np
-from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32_vnni
-from topi.x86.tensor_intrin import dot_16x1x16_int8_int8_int32
-from nose.tools import nottest
+from topi.x86.tensor_intrin import dot_16x1x16_uint8_int8_int32_cascadelake
+from topi.x86.tensor_intrin import dot_16x1x16_uint8_int8_int32
+import pytest
 
 
-@nottest
+@pytest.mark.skip("skip because feature not enabled")
 def test_fc_int8_acc32():
     m = 1024
     n = 1024
     k = 1024
 
-    X = tvm.placeholder((m, k), name='X', dtype="uint8")
-    W = tvm.placeholder((n, k), name='W', dtype="int8")
+    X = te.placeholder((m, k), name='X', dtype="uint8")
+    W = te.placeholder((n, k), name='W', dtype="int8")
 
     peak = 280
     print("Peak {} Gops/s".format(peak))
@@ -41,19 +42,19 @@ def test_fc_int8_acc32():
     # (ignoring processor)" error with the following setting. After LLVM 8.0 is enabled in the
     # test, we should use cascadelake setting.
     def verify(target="llvm -mcpu=cascadelake"):
-        if not tvm.module.enabled(target):
+        if not tvm.runtime.enabled(target):
             print("skip because %s is not enabled..." % target)
             return
 
         ctx = tvm.context(target, 0)
-        pc = dot_16x1x16_int8_int8_int32_vnni()
-        ak = tvm.reduce_axis((0, k), name='k')
-        packedW = tvm.placeholder(
+        pc = dot_16x1x16_uint8_int8_int32_cascadelake()
+        ak = te.reduce_axis((0, k), name='k')
+        packedW = te.placeholder(
             (n // 16, 16 * (k // 4), 4), name='packedW', dtype="int8")
 
-        t_fc = tvm.compute((m, n), lambda i, j: tvm.sum(X[i, ak].astype(
+        t_fc = te.compute((m, n), lambda i, j: te.sum(X[i, ak].astype(
             "int32") * packedW[j / 16, (ak / 4) * 16 + j % 16, ak % 4].astype("int32"), axis=ak), name="F")
-        t_sch = tvm.create_schedule(t_fc.op)
+        t_sch = te.create_schedule(t_fc.op)
         a_x, a_y = t_fc.op.axis
         a_k, = t_fc.op.reduce_axis
 

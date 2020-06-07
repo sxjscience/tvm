@@ -15,6 +15,7 @@
 # specific language governing permissions and limitations
 # under the License.
 import tvm
+from tvm import te
 from tvm import relay
 from tvm.relay import ExprFunctor, ExprMutator, ExprVisitor
 
@@ -125,6 +126,16 @@ def test_match():
     p = relay.prelude.Prelude()
     check_visit(p.mod[p.map])
 
+
+def test_match_completeness():
+    p = relay.prelude.Prelude()
+    for completeness in [True, False]:
+        match_expr = relay.adt.Match(p.nil, [], complete=completeness)
+        result_expr = ExprMutator().visit(match_expr)
+        # ensure the mutator doesn't mangle the completeness flag
+        assert result_expr.complete == completeness
+
+
 if __name__ == "__main__":
     test_constant()
     test_tuple()
@@ -139,3 +150,4 @@ if __name__ == "__main__":
     test_ref_write()
     test_memo()
     test_match()
+    test_match_completeness()
