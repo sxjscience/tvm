@@ -214,9 +214,13 @@ class VarVisitor : protected ExprVisitor, protected PatternVisitor {
   }
 
   void VisitExpr_(const LetNode* op) final {
-    MarkBounded(op->var);
-    VisitExpr(op->value);
-    VisitExpr(op->body);
+    Expr let = GetRef<Let>(op);
+    while (auto let_node = let.as<LetNode>()) {
+      MarkBounded(let_node->var);
+      VisitExpr(let_node->value);
+      let = let_node->body;
+    }
+    VisitExpr(let);
   }
 
   void VisitPattern(const Pattern& p) final { PatternVisitor::VisitPattern(p); }
@@ -302,6 +306,35 @@ TVM_REGISTER_GLOBAL("relay.analysis.all_type_vars").set_body([](TVMArgs args, TV
     *ret = AllTypeVars(Downcast<Expr>(x), mod);
   }
 });
+
+class DtypeCollector : protected ExprVisitor, protected TypeVisitor {
+ public:
+  void VisitExpr(const Expr& expr) final {
+    if (expr->checked_type_.defined()) {
+      TypeVisitor::VisitType(expr->checked_type());
+    }
+    ExprVisitor::VisitExpr(expr);
+  }
+
+  void VisitType_(const TensorTypeNode* op) final { dtypes_.insert(DLDataType2String(op->dtype)); }
+
+  Array<String> All(const Expr& expr) {
+    VisitExpr(expr);
+
+    Array<String> res;
+    for (const auto& dtype : dtypes_) {
+      res.push_back(String(dtype));
+    }
+    return res;
+  }
+
+ private:
+  std::unordered_set<std::string> dtypes_;
+};
+
+tvm::Array<String> AllDtypes(const Expr& expr) { return DtypeCollector().All(expr); }
+
+TVM_REGISTER_GLOBAL("relay.analysis.all_dtypes").set_body_typed(AllDtypes);
 
 /*!
  * \brief Get reference counter of each internal ExprNode in body.
@@ -420,7 +453,7 @@ struct IsDynamicVisitor : public TypeVisitor {
   bool is_dyn{false};
   void VisitType_(const TensorTypeNode* tt) {
     for (auto dim : tt->shape) {
-      if (dim.as<Any>()) {
+      if (dim.as<tir::IntImmNode>() == nullptr) {
         is_dyn = true;
         break;
       }
@@ -444,17 +477,10 @@ bool IsDataDependant(const CallNode* call) {
     return false;
   }
 
-  if (op->name == "reshape") {
-    if (const auto* attrs = call->attrs.as<ReshapeAttrs>()) {
-      if (attrs->newshape) {
-        // If newshape attribute exists, it isn't data dependant.
-        return false;
-      }
-    }
-  } else if (op->name == "topk") {
-    if (const auto* attrs = call->attrs.as<TopKAttrs>()) {
-      if (attrs->k) {
-        // If k attribute exists, it isn't data dependant.
+  if (op->name == "strided_slice") {
+    if (const auto* attrs = call->attrs.as<StridedSliceAttrs>()) {
+      if (attrs->begin && attrs->end && attrs->strides) {
+        // not data dependant if begin, end and strides exist
         return false;
       }
     }

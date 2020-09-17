@@ -340,8 +340,8 @@ class VulkanDeviceAPI final : public DeviceAPI {
     VulkanThreadEntry::ThreadLocal()->pool->FreeWorkspace(ctx, data);
   }
 
-  static const std::shared_ptr<VulkanDeviceAPI>& Global() {
-    static std::shared_ptr<VulkanDeviceAPI> inst = std::make_shared<VulkanDeviceAPI>();
+  static VulkanDeviceAPI* Global() {
+    static VulkanDeviceAPI* inst = new VulkanDeviceAPI();
     return inst;
   }
 
@@ -413,7 +413,11 @@ void VulkanDeviceAPI::GetAttr(TVMContext ctx, DeviceAttrKind kind, TVMRetValue* 
       *rv = ss.str();
       break;
     }
+    case kMaxRegistersPerBlock:
+      return;
     case kGcnArch:
+      return;
+    case kApiVersion:
       return;
   }
 }
@@ -1155,7 +1159,7 @@ TVM_REGISTER_GLOBAL("runtime.module.loadfile_vulkan").set_body_typed(VulkanModul
 TVM_REGISTER_GLOBAL("runtime.module.loadbinary_vulkan").set_body_typed(VulkanModuleLoadBinary);
 
 TVM_REGISTER_GLOBAL("device_api.vulkan").set_body([](TVMArgs args, TVMRetValue* rv) {
-  DeviceAPI* ptr = VulkanDeviceAPI::Global().get();
+  DeviceAPI* ptr = VulkanDeviceAPI::Global();
   *rv = static_cast<void*>(ptr);
 });
 

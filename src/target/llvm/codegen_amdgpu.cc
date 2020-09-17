@@ -108,11 +108,13 @@ class CodeGenAMDGPU : public CodeGenLLVM {
       llvm::GlobalVariable* global = new llvm::GlobalVariable(
           *module_, type, false, llvm::GlobalValue::PrivateLinkage, 0, ".shared", nullptr,
           llvm::GlobalValue::NotThreadLocal, shared_address_space);
+      if (global->getAlignment() < static_cast<uint32_t>(info.alignment)) {
 #if TVM_LLVM_VERSION >= 100
-      global->setAlignment(llvm::Align(info.alignment));
+        global->setAlignment(llvm::Align(info.alignment));
 #else
-      global->setAlignment(info.alignment);
+        global->setAlignment(info.alignment);
 #endif
+      }
       buf = global;
     }
 
@@ -125,7 +127,7 @@ class CodeGenAMDGPU : public CodeGenLLVM {
 
   // Return the thread index via intrinsics.
   llvm::Value* GetThreadIndex(const IterVar& iv) final {
-    runtime::ThreadScope ts = runtime::ThreadScope::make(iv->thread_tag);
+    runtime::ThreadScope ts = runtime::ThreadScope::Create(iv->thread_tag);
     llvm::Intrinsic::ID intrin_id = ::llvm::Intrinsic::amdgcn_workitem_id_x;
     if (ts.rank == 1) {
       switch (ts.dim_index) {
@@ -189,47 +191,20 @@ class CodeGenAMDGPU : public CodeGenLLVM {
   }
 };
 
-inline int DetectROCMComputeVersion(const std::string& target) {
-  size_t pos = target.find("=gfx");
-  if (pos != std::string::npos) {
-    int value;
-    std::stringstream is(target.substr(pos + 4));
-    if (is >> value) return value;
-  }
-  TVMContext tvm_ctx;
-  tvm_ctx.device_type = kDLROCM;
-  tvm_ctx.device_id = 0;
-  tvm::runtime::DeviceAPI* api = tvm::runtime::DeviceAPI::Get(tvm_ctx, true);
-  if (api != nullptr) {
-    TVMRetValue val;
-    api->GetAttr(tvm_ctx, tvm::runtime::kExist, &val);
-    if (val.operator int() == 1) {
-      tvm::runtime::DeviceAPI::Get(tvm_ctx)->GetAttr(tvm_ctx, tvm::runtime::kGcnArch, &val);
-      return val.operator int();
-    }
-  }
-  LOG(WARNING) << "Cannot find -mcpu to specify rocm compute version assume gfx900";
-  return 900;
-}
-
-runtime::Module BuildAMDGPU(IRModule mod, std::string target) {
+runtime::Module BuildAMDGPU(IRModule mod, Target target) {
 #if TVM_LLVM_VERSION < 90
   LOG(FATAL) << "AMDGPU backend requires at least LLVM 9";
   // Lower versions will crash when loading the bitcode, see
   // issue #4087 for a discussion
 #endif
   InitializeLLVM();
-  CHECK(target.length() >= 4 && target.substr(0, 4) == "rocm");
-  std::ostringstream config;
-  config << "-mtriple=amdgcn-amd-amdhsa-hcc -mcpu=gfx" << DetectROCMComputeVersion(target)
-         << " -mattr=-code-object-v3 " << target.substr(4, target.length() - 4);
-  std::unique_ptr<llvm::TargetMachine> tm = GetLLVMTargetMachine(config.str());
+  std::unique_ptr<llvm::TargetMachine> tm = GetLLVMTargetMachine(target);
   std::unique_ptr<llvm::LLVMContext> ctx(new llvm::LLVMContext());
   // careful: cg will hold a naked pointer reference to ctx, so it should
   // have a shorter lifetime than the ctx.
   std::unique_ptr<CodeGenAMDGPU> cg(new CodeGenAMDGPU());
 
-  cg->Init("TVMAMDGPUModule", tm.get(), ctx.get(), false, false);
+  cg->Init("TVMAMDGPUModule", tm.get(), ctx.get(), false, false, false);
 
   for (auto kv : mod->functions) {
     CHECK(kv.second->IsInstance<PrimFuncNode>()) << "Can only lower IR Module with PrimFuncs";

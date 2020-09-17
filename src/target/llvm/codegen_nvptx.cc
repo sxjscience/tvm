@@ -101,7 +101,7 @@ class CodeGenNVPTX : public CodeGenLLVM {
 
   // Return the thread index via intrinsics.
   llvm::Value* GetThreadIndex(const IterVar& iv) final {
-    runtime::ThreadScope ts = runtime::ThreadScope::make(iv->thread_tag);
+    runtime::ThreadScope ts = runtime::ThreadScope::Create(iv->thread_tag);
     llvm::Intrinsic::ID intrin_id = ::llvm::Intrinsic::nvvm_read_ptx_sreg_tid_x;
     if (ts.rank == 1) {
       switch (ts.dim_index) {
@@ -197,11 +197,11 @@ static bool GetWarpShuffleIntrinsic(const CallNode* op, llvm::Intrinsic::ID* id)
       llvm::Intrinsic::nvvm_shfl_down_i32, llvm::Intrinsic::nvvm_shfl_down_f32};
 
   int offset = 0;
-  if (op->is_intrinsic(intrinsic::tvm_warp_shuffle)) {
+  if (op->op.same_as(builtin::tvm_warp_shuffle())) {
     offset = 0;
-  } else if (op->is_intrinsic(intrinsic::tvm_warp_shuffle_up)) {
+  } else if (op->op.same_as(builtin::tvm_warp_shuffle_up())) {
     offset = 2;
-  } else if (op->is_intrinsic(intrinsic::tvm_warp_shuffle_down)) {
+  } else if (op->op.same_as(builtin::tvm_warp_shuffle_down())) {
     offset = 4;
   } else {
     return false;
@@ -226,7 +226,7 @@ llvm::Value* CodeGenNVPTX::CreateIntrinsic(const CallNode* op) {
     llvm::Type* return_type = arg_type[0];
     llvm::Function* func = GetIntrinsicDecl(id, return_type, arg_type);
     return builder_->CreateCall(func, arg_value);
-  } else if (op->is_intrinsic(intrinsic::tvm_warp_activemask)) {
+  } else if (op->op.same_as(builtin::tvm_warp_activemask())) {
     // Only nvptx target may keep this intrinsic at this point.
     // PTX assembly: asm "activemask.b32 r1;"
     auto fty = llvm::FunctionType::get(t_int32_, false);
@@ -236,38 +236,23 @@ llvm::Value* CodeGenNVPTX::CreateIntrinsic(const CallNode* op) {
   return CodeGenLLVM::CreateIntrinsic(op);
 }
 
-inline int DetectCUDAComputeVersion() {
-  TVMContext tvm_ctx;
-  tvm_ctx.device_type = kDLGPU;
-  tvm_ctx.device_id = 0;
-  TVMRetValue val;
-  tvm::runtime::DeviceAPI::Get(tvm_ctx)->GetAttr(tvm_ctx, tvm::runtime::kExist, &val);
-  if (val.operator int() == 1) {
-    tvm::runtime::DeviceAPI::Get(tvm_ctx)->GetAttr(tvm_ctx, tvm::runtime::kComputeVersion, &val);
-    std::string version = val;
-    std::istringstream is(version);
-    double ver;
-    is >> ver;
-    return static_cast<int>(ver * 10);
-  } else {
-    return 20;
-  }
+int GetCUDAComputeVersion(const Target& target) {
+  Optional<String> mcpu = target->GetAttr<String>("mcpu");
+  CHECK(mcpu.defined()) << "InternalError: \"-mcpu\" is undefined in the NVPTX target";
+  std::string sm_version = mcpu.value();
+  return std::stoi(sm_version.substr(3));
 }
 
-runtime::Module BuildNVPTX(IRModule mod, std::string target) {
+runtime::Module BuildNVPTX(IRModule mod, Target target) {
   InitializeLLVM();
-  CHECK(target.length() >= 5 && target.substr(0, 5) == "nvptx");
-  int compute_ver = DetectCUDAComputeVersion();
-  std::ostringstream config;
-  config << "-mtriple=nvptx64-nvidia-cuda -mcpu=sm_" << compute_ver
-         << target.substr(5, target.length() - 5);
-  std::unique_ptr<llvm::TargetMachine> tm = GetLLVMTargetMachine(config.str());
+  int compute_ver = GetCUDAComputeVersion(target);
+  std::unique_ptr<llvm::TargetMachine> tm = GetLLVMTargetMachine(target);
   std::unique_ptr<llvm::LLVMContext> ctx(new llvm::LLVMContext());
   // careful: cg will hold a naked pointer reference to ctx, so it should
   // have a shorter lifetime than the ctx.
   std::unique_ptr<CodeGenNVPTX> cg(new CodeGenNVPTX());
 
-  cg->Init("TVMPTXModule", tm.get(), ctx.get(), false, false);
+  cg->Init("TVMPTXModule", tm.get(), ctx.get(), false, false, false);
 
   for (auto kv : mod->functions) {
     CHECK(kv.second->IsInstance<PrimFuncNode>()) << "Can only lower IR Module with PrimFuncs";

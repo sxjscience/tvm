@@ -23,6 +23,11 @@
  */
 #ifndef TVM_TARGET_LLVM_LLVM_COMMON_H_
 #define TVM_TARGET_LLVM_LLVM_COMMON_H_
+
+#ifdef _MSC_VER
+#pragma warning(disable : 4141 4291 4146 4624)
+#endif
+
 #ifdef TVM_LLVM_VERSION
 
 #include <llvm/Analysis/TargetTransformInfo.h>
@@ -32,6 +37,7 @@
 #include <llvm/IR/Intrinsics.h>
 #include <llvm/IR/Value.h>
 #include <llvm/Support/SourceMgr.h>
+#include <tvm/runtime/container.h>
 #if TVM_LLVM_VERSION >= 100
 #include <llvm/IR/IntrinsicsAMDGPU.h>
 #include <llvm/IR/IntrinsicsARM.h>
@@ -78,6 +84,10 @@
 #include <utility>
 
 namespace tvm {
+
+// The TVM target
+class Target;
+
 namespace codegen {
 
 /*!
@@ -88,25 +98,38 @@ void InitializeLLVM();
 
 /*!
  * \brief Parse target options
- * \param target_str Target string, in format "llvm -target=xxx -mcpu=xxx"
+ * \param target The TVM target
  * \param triple Target triple
  * \param mcpu cpu info
  * \param options the options
  * \param mattr The attributes
  */
-void ParseLLVMTargetOptions(const std::string& target_str, std::string* triple, std::string* mcpu,
+void ParseLLVMTargetOptions(const Target& target, std::string* triple, std::string* mcpu,
                             std::string* mattr, llvm::TargetOptions* options);
 
 /*!
- * \brief Get target machine from target_str string.
- * \param target_str Target string, in format "llvm -target=xxx -mcpu=xxx"
+ * \brief Get target machine from TVM target.
+ * \param target The TVM target
  * \param allow_null Whether allow null to be returned.
  * \return target machine
  */
-std::unique_ptr<llvm::TargetMachine> GetLLVMTargetMachine(const std::string& target_str,
+std::unique_ptr<llvm::TargetMachine> GetLLVMTargetMachine(const Target& target,
                                                           bool allow_null = false);
 
+/*!
+ * \brief Convert the TVM's LLVM target to string by extracting only relevant fields
+ * \param target The TVM target to be extracted
+ * \return The raw string format for the TVM LLVM target
+ */
+std::string LLVMTargetToString(const Target& target);
+
 }  // namespace codegen
+}  // namespace tvm
+
+namespace tvm {
+namespace runtime {
+inline String::operator llvm::StringRef() const { return llvm::StringRef(get()->data, size()); }
+}  // namespace runtime
 }  // namespace tvm
 #endif  // TVM_LLVM_VERSION
 #endif  // TVM_TARGET_LLVM_LLVM_COMMON_H_

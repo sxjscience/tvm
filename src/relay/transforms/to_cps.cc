@@ -52,6 +52,7 @@
  */
 #include <tvm/ir/type_functor.h>
 #include <tvm/relay/expr_functor.h>
+#include <tvm/relay/feature.h>
 #include <tvm/relay/pattern_functor.h>
 #include <tvm/relay/transform.h>
 
@@ -151,7 +152,7 @@ Function ToCPS(const Function& f, const IRModule& m, CPSMap* cm, VarMap* vm,
         // only look unfold non-external calls.
         BaseFunc base_func = m->Lookup(gv);
         if (auto* n = base_func.as<FunctionNode>()) {
-          auto cps_gv = GlobalVar(gv->name_hint + "_cps");
+          auto cps_gv = GlobalVar(std::string(gv->name_hint) + "_cps");
           cm->insert({gv, cps_gv});
           m->Add(cps_gv, ToCPS(GetRef<Function>(n), m, cm));
         } else {
@@ -301,11 +302,13 @@ Function ToCPS(const Function& f, const IRModule& m, CPSMap* cm) {
 }
 
 Function ToCPS(const Function& f, const IRModule& m) {
+  CheckFeature(f, m, FeatureSet::All() - fGraph);
   CPSMap cps;
   return ToCPS(f, m, &cps);
 }
 
 Function UnCPS(const Function& f) {
+  CheckFeature(f, FeatureSet::All() - fGraph);
   CHECK_GT(f->params.size(), 0);
   std::vector<Var> new_params;
   for (const auto& p : f->params) {

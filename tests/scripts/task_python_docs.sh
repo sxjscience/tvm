@@ -18,8 +18,13 @@
 
 set -e
 set -u
+set -o pipefail
 
 source tests/scripts/setup-pytest-env.sh
+
+# to avoid CI CPU thread throttling.
+export TVM_BIND_THREADS=0
+export OMP_NUM_THREADS=4
 
 cleanup()
 {
@@ -44,7 +49,7 @@ make cython3
 
 cd docs
 PYTHONPATH=`pwd`/../python make html |& tee /tmp/$$.log.txt
-if grep -E "failed to execute" < /tmp/$$.log.txt; then
+if grep -E "failed to execute|Segmentation fault" < /tmp/$$.log.txt; then
     echo "Some of sphinx-gallery item example failed to execute."
     exit 1
 fi

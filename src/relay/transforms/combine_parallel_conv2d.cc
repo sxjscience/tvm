@@ -164,6 +164,7 @@ class ParallelConv2DCombiner : public ParallelOpCombiner {
   void UpdateGroupOutput(const Expr& data, const Group& branches, size_t depth,
                          ExprSubstMap* subst_map) {
     int64_t index = 0;
+
     for (const auto& branch : branches) {
       const CallNode* conv2d = branch[0];
       int64_t channels = GetConv2DSuperChannelsDim(conv2d);
@@ -171,12 +172,13 @@ class ParallelConv2DCombiner : public ParallelOpCombiner {
       Array<Integer> end;
       for (size_t i = 0; i < channel_pos_; i++) {
         begin.push_back(0);
-        end.push_back(NullValue<Integer>());
+        end.push_back(-1);
       }
       begin.push_back(index);
       index += channels;
-      end.push_back(index);
-      auto slice = MakeStridedSlice(data, std::move(begin), std::move(end), Array<Integer>{});
+      end.push_back(channels);
+      Array<Integer> strides(begin.size(), 1);
+      auto slice = MakeStridedSlice(data, begin, end, strides, "size");
       subst_map->insert({GetRef<Expr>(branch[depth]), slice});
     }
   }

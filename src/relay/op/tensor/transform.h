@@ -35,10 +35,10 @@
 #include <utility>
 #include <vector>
 
+#include "../make_op.h"
+
 namespace tvm {
 namespace relay {
-
-extern Expr MakeReshape(Expr data, Expr newshape);
 
 template <typename AttrType>
 bool ConcatenateRel(const Array<Type>& types, int num_inputs, const Attrs& attrs,
@@ -99,16 +99,16 @@ bool ConcatenateRel(const Array<Type>& types, int num_inputs, const Attrs& attrs
     std::vector<IndexExpr> non_any;
     for (int j = 0; j < data_length; ++j) {
       const auto& e = Downcast<TensorType>(tensor_tuple->fields[j]);
-      if (!e->shape[i].as<Any>()) {
+      if (!e->shape[i].as<AnyNode>()) {
         non_any.push_back(e->shape[i]);
         // accumulate axis dimension
-        if (j > 0 && i == axis && !oshape[i].as<Any>()) {
+        if (j > 0 && i == axis && !oshape[i].as<AnyNode>()) {
           oshape[i] += e->shape[i];
         }
       }
     }
     int non_any_size = static_cast<int>(non_any.size());
-    if (non_any_size != data_length) oshape[i] = Any::make();
+    if (non_any_size != data_length) oshape[i] = Any();
     if (i != axis) {
       for (int k = 1; k < non_any_size; k++) {
         if (reporter->AssertEQ(non_any[0], non_any[k])) continue;
@@ -179,6 +179,15 @@ static inline Array<Array<Layout>> ConcatenateLayout(const Attrs& attrs,
 
   return Array<Array<Layout>>{Array<Layout>(old_in_layouts.size(), ret), {ret}};
 }
+
+/*!
+ * \brief Infer output shape for reshape.
+ *
+ * \param data_shape The input data shape.
+ * \param attrs The attributes.
+ * \return Output shape.
+ */
+Array<IndexExpr> infer_newshape(const Array<IndexExpr>& data_shape, const Attrs& attrs);
 
 }  // namespace relay
 }  // namespace tvm

@@ -196,6 +196,10 @@ tvm_t.*
 .python_history
 .pytest_cache
 .local
+cmake-build-debug
+
+# Visual Studio
+.vs
 
 # Visual Studio Code
 .vscode
@@ -229,8 +233,3 @@ conda/pkg
 # nix files
 .envrc
 *.nix
-
-# antlr files
-*.tokens
-*.interp
-cmake-build-debug
