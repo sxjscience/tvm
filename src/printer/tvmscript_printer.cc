@@ -18,11 +18,10 @@
  */
 
 /*!
- * \file printer/tir_hybrid_printer.cc
- * \brief Printer class to print Te IR to python syntax script
+ * \file printer/tvmscript_printer.cc
+ * \brief Printer class to print Tensor IR to python syntax script
  */
 
-#include <tvm/arith/analyzer.h>
 #include <tvm/ir/module.h>
 #include <tvm/node/serialization.h>
 #include <tvm/runtime/registry.h>
@@ -34,6 +33,7 @@
 #include <tvm/tir/stmt_functor.h>
 
 #include <algorithm>
+#include <utility>
 
 #include "doc.h"
 #include "meta_data.h"
@@ -42,13 +42,13 @@
 namespace tvm {
 namespace tir {
 
-class TIRHybridPrinter : public StmtFunctor<Doc(const Stmt&)>,
+class TVMScriptPrinter : public StmtFunctor<Doc(const Stmt&)>,
                          public ExprFunctor<Doc(const PrimExpr&)>,
                          public TypeFunctor<Doc(const Type&)> {
  public:
-  explicit TIRHybridPrinter(bool show_meta,
+  explicit TVMScriptPrinter(bool show_meta,
                             runtime::TypedPackedFunc<std::string(Stmt)> annotate = nullptr)
-      : show_meta_(show_meta), annotate_(annotate), meta_collector_(&meta_) {}
+      : show_meta_(show_meta), annotate_(std::move(annotate)), meta_collector_(&meta_) {}
 
   /*! \brief Print the node */
   TVM_DLL Doc Print(const ObjectRef& node);
@@ -68,6 +68,8 @@ class TIRHybridPrinter : public StmtFunctor<Doc(const Stmt&)>,
   std::unordered_set<const VarNode*> var_not_in_headers;
   /*! \brief buffer collector (buffer defined in BufferMap and BufferAllocation)*/
   std::unordered_set<const BufferNode*> buf_not_in_headers;
+  /*! \brief Map from Var to thread env name */
+  std::unordered_map<Var, String, ObjectPtrHash, ObjectPtrEqual> var_env_map_;
   /*! \brief Map from Var to Doc */
   std::unordered_map<Var, Doc, ObjectPtrHash, ObjectPtrEqual> memo_var_;
   /*! \brief Map from Buffer to Doc */
@@ -223,7 +225,7 @@ class TIRHybridPrinter : public StmtFunctor<Doc(const Stmt&)>,
   }
 };
 
-Doc TIRHybridPrinter::GetUniqueName(std::string prefix) {
+Doc TVMScriptPrinter::GetUniqueName(std::string prefix) {
   std::replace(prefix.begin(), prefix.end(), '.', '_');
   std::string unique_prefix = prefix;
   auto it = name_alloc_map_.find(prefix);
@@ -235,7 +237,7 @@ Doc TIRHybridPrinter::GetUniqueName(std::string prefix) {
   return Doc::Text(unique_prefix);
 }
 
-Doc TIRHybridPrinter::AllocVar(const Var& var) {
+Doc TVMScriptPrinter::AllocVar(const Var& var) {
   const auto& it = memo_var_.find(var);
   if (it != memo_var_.end()) {
     return it->second;
@@ -249,7 +251,7 @@ Doc TIRHybridPrinter::AllocVar(const Var& var) {
   return val;
 }
 
-Doc TIRHybridPrinter::AllocBufferDeclaration(const Buffer& buf) {
+Doc TVMScriptPrinter::AllocBufferDeclaration(const Buffer& buf) {
   Doc doc = Print(buf->shape);
   if (!runtime::TypeEqual(buf->dtype, DataType::Float(32))) {
     doc << ", dtype=" << PrintDType(buf->dtype);
@@ -291,7 +293,7 @@ Doc TIRHybridPrinter::AllocBufferDeclaration(const Buffer& buf) {
   return doc;
 }
 
-Doc TIRHybridPrinter::AllocBuf(const Buffer& buffer) {
+Doc TVMScriptPrinter::AllocBuf(const Buffer& buffer) {
   const auto& it = memo_buf_.find(buffer);
   if (it != memo_buf_.end()) {
     return it->second;
@@ -306,7 +308,7 @@ Doc TIRHybridPrinter::AllocBuf(const Buffer& buffer) {
   return val;
 }
 
-Doc TIRHybridPrinter::Print(const ObjectRef& node) {
+Doc TVMScriptPrinter::Print(const ObjectRef& node) {
   if (!node.defined()) return Doc::Text("None");
   if (node->IsInstance<StmtNode>()) {
     return PrintOptionalInfo(Downcast<Stmt>(node)) << VisitStmt(Downcast<Stmt>(node));
@@ -334,102 +336,106 @@ Doc TIRHybridPrinter::Print(const ObjectRef& node) {
   }
 }
 
-Doc TIRHybridPrinter::VisitExprDefault_(const Object* op) {
+Doc TVMScriptPrinter::VisitExprDefault_(const Object* op) {
   meta_collector_.Collect(GetRef<ObjectRef>(op));
   return this->meta_.GetMetaNode(GetRef<ObjectRef>(op));
 }
 
-Doc TIRHybridPrinter::VisitStmtDefault_(const Object* op) {
+Doc TVMScriptPrinter::VisitStmtDefault_(const Object* op) {
   meta_collector_.Collect(GetRef<ObjectRef>(op));
   return this->meta_.GetMetaNode(GetRef<ObjectRef>(op));
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const IntImmNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const IntImmNode* op) {
   return PrintConstScalar<int64_t>(op->dtype, &(op->value));
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const FloatImmNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const FloatImmNode* op) {
   return PrintConstScalar<double>(op->dtype, &(op->value));
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const StringImmNode* op) { return Doc::StrLiteral(op->value); }
+Doc TVMScriptPrinter::VisitExpr_(const StringImmNode* op) { return Doc::StrLiteral(op->value); }
 
-Doc TIRHybridPrinter::VisitExpr_(const CastNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const CastNode* op) {
   Doc doc;
-  doc << "tir.cast(" << PrintDType(op->dtype) << ", " << Print(op->value) << ")";
+  if (cast(op->dtype, op->value)->IsInstance<CastNode>()) {
+    doc << Print(op->value) << ".astype(" << PrintDType(op->dtype) << ")";
+  } else {
+    doc << "tir.cast(" << Print(op->value) << ", " << PrintDType(op->dtype) << ")";
+  }
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const VarNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const VarNode* op) {
   const Var& var = GetRef<Var>(op);
   return meta_.InMeta(var) ? meta_.GetMetaNode(var) : AllocVar(GetRef<Var>(op));
 }
 
-#define TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(OpName, OpString)     \
-  Doc TIRHybridPrinter::VisitExpr_(const OpName* op) {             \
+#define TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(OpName, OpString)      \
+  Doc TVMScriptPrinter::VisitExpr_(const OpName* op) {             \
     Doc doc;                                                       \
     doc << '(' << Print(op->a) << OpString << Print(op->b) << ")"; \
     return doc;                                                    \
   }
 
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(AddNode, " + ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(SubNode, " - ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(MulNode, "*")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(DivNode, " / ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(ModNode, " % ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(EQNode, " == ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(NENode, " != ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(LTNode, " < ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(LENode, " <= ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(GTNode, " > ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(GENode, " >= ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(AndNode, " and ")
-TVM_DECLARE_TIR_HYBRID_PRINTER_BINOP(OrNode, " or ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(AddNode, " + ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(SubNode, " - ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(MulNode, "*")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(DivNode, " / ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(ModNode, " % ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(EQNode, " == ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(NENode, " != ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(LTNode, " < ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(LENode, " <= ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(GTNode, " > ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(GENode, " >= ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(AndNode, " and ")
+TVM_DECLARE_TVMSCRIPT_PRINTER_BINOP(OrNode, " or ")
 
-Doc TIRHybridPrinter::VisitExpr_(const FloorDivNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const FloorDivNode* op) {
   Doc doc;
   doc << "tir.floordiv(" << Print(op->a) << ", " << Print(op->b) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const FloorModNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const FloorModNode* op) {
   Doc doc;
   doc << "tir.floormod(" << Print(op->a) << ", " << Print(op->b) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const MinNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const MinNode* op) {
   Doc doc;
   doc << "tir.min(" << Print(op->a) << ", " << Print(op->b) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const MaxNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const MaxNode* op) {
   Doc doc;
   doc << "tir.max(" << Print(op->a) << ", " << Print(op->b) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const NotNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const NotNode* op) {
   Doc doc;
   doc << "not (" << Print(op->a) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const SelectNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const SelectNode* op) {
   Doc doc;
   doc << "tir.select(" << Print(op->condition) << ", " << Print(op->true_value) << ", "
       << Print(op->false_value) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const BufferLoadNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const BufferLoadNode* op) {
   Doc doc;
   doc << Print(op->buffer) << Print(op->indices);
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const LoadNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const LoadNode* op) {
   Doc doc;
   if (op->dtype == DataType::Float(32) && is_one(op->predicate) &&
       op->buffer_var->dtype == DataType::Float(32)) {
@@ -445,25 +451,25 @@ Doc TIRHybridPrinter::VisitExpr_(const LoadNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const RampNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const RampNode* op) {
   Doc doc;
   doc << "tir.ramp(" << Print(op->base) << ", " << Print(op->stride) << ", " << op->lanes << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const BroadcastNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const BroadcastNode* op) {
   Doc doc;
   doc << "tir.broadcast(" << Print(op->value) << ", " << op->lanes << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const LetNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const LetNode* op) {
   Doc doc;
   doc << "tir.let(" << Print(op->var) << ", " << Print(op->value) << ", " << Print(op->body) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const CallNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const CallNode* op) {
   Doc doc;
   if (auto* ptr_op = op->op.as<OpNode>()) {
     doc << Doc::Text(ptr_op->name) << "(";
@@ -481,20 +487,20 @@ Doc TIRHybridPrinter::VisitExpr_(const CallNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const ShuffleNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const ShuffleNode* op) {
   Doc doc;
   doc << "tir.shuffle(" << Print(op->vectors) << ", " << Print(op->indices) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitExpr_(const ReduceNode* op) {
+Doc TVMScriptPrinter::VisitExpr_(const ReduceNode* op) {
   Doc doc;
   doc << "tir.reduce(" << Print(op->combiner) << ", " << Print(op->source) << ", "
       << Print(op->axis) << ", " << op->value_index << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const LetStmtNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const LetStmtNode* op) {
   Doc doc;
   if (current_num_ != num_child_ - 1) {
     doc << "with tir.let(" << Print(op->var) << ", " << Print(op->value) << "):";
@@ -507,8 +513,72 @@ Doc TIRHybridPrinter::VisitStmt_(const LetStmtNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const AttrStmtNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const AttrStmtNode* op) {
   Doc doc;
+  // merge attr with allocate when possible
+  if (op->node->IsInstance<VarNode>() && op->attr_key == "storage_scope" &&
+      op->body->IsInstance<AllocateNode>()) {
+    const auto* alloc = Downcast<Allocate>(op->body).get();
+    if (alloc->buffer_var.same_as(op->node)) {
+      var_not_in_headers.insert(alloc->buffer_var.get());
+      if (current_num_ != num_child_ - 1) {
+        doc << "with tir.allocate(" << Print(alloc->extents) << ", " << PrintDType(alloc->dtype)
+            << ", " << Print(op->value);
+        if (!is_one(alloc->condition)) {
+          doc << ", " << Print(alloc->condition);
+        }
+        doc << ") as " << Print(op->node) << ":";
+        doc << Doc::Indent(4, Doc::NewLine() << PrintBody(alloc->body));
+      } else {
+        doc << Print(op->node) << " = tir.allocate(" << Print(alloc->extents) << ", "
+            << PrintDType(alloc->dtype) << ", " << Print(op->value);
+        if (!is_one(alloc->condition)) {
+          doc << ", " << Print(alloc->condition);
+        }
+        doc << ")" << Doc::NewLine() << PrintBody(alloc->body);
+      }
+      return doc;
+    }
+  }
+  // merge attr with realize when possible
+  if (op->node->IsInstance<BufferNode>() && op->attr_key == "realize_scope" &&
+      op->body->IsInstance<BufferRealizeNode>()) {
+    const auto* realize = Downcast<BufferRealize>(op->body).get();
+    if (realize->buffer.same_as(op->node)) {
+      if (current_num_ != num_child_ - 1) {
+        doc << "with tir.realize(" << Print(realize->buffer) << Print(realize->bounds) << ", "
+            << Print(op->value);
+        if (!is_one(realize->condition)) {
+          doc << ", " << Print(realize->condition);
+        }
+        doc << "):" << Doc::Indent(4, Doc::NewLine() << PrintBody(realize->body));
+      } else {
+        doc << "tir.realize(" << Print(realize->buffer) << Print(realize->bounds) << ", "
+            << Print(op->value);
+        if (!is_one(realize->condition)) {
+          doc << ", " << Print(realize->condition);
+        }
+        doc << ")" << Doc::NewLine() << PrintBody(realize->body);
+      }
+      return doc;
+    }
+  }
+  // concise thread env
+  if (op->node->IsInstance<IterVarNode>() && op->attr_key == "thread_extent") {
+    const auto* iter_var = Downcast<IterVar>(op->node).get();
+    CHECK(!iter_var->dom.defined());
+    var_not_in_headers.insert(iter_var->var.get());
+    var_env_map_[iter_var->var] = iter_var->thread_tag;
+    if (current_num_ != num_child_ - 1) {
+      doc << "with tir.launch_thread(" << Print(iter_var->var) << ", " << Print(op->value) << "):";
+      doc << Doc::Indent(4, Doc::NewLine() << PrintBody(op->body));
+    } else {
+      doc << "tir.launch_thread(" << Print(iter_var->var) << ", " << Print(op->value) << ")";
+      doc << Doc::NewLine() << PrintBody(op->body);
+    }
+    return doc;
+  }
+  // default
   if (current_num_ != num_child_ - 1) {
     doc << "with tir.attr(" << Print(op->node) << ", " << Doc::StrLiteral(op->attr_key) << ", "
         << Print(op->value) << "):";
@@ -521,7 +591,7 @@ Doc TIRHybridPrinter::VisitStmt_(const AttrStmtNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const AssertStmtNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const AssertStmtNode* op) {
   Doc doc;
   if (current_num_ != num_child_ - 1) {
     doc << "with tir.Assert(" << Print(op->condition) << ", " << Print(op->message) << "):";
@@ -533,7 +603,7 @@ Doc TIRHybridPrinter::VisitStmt_(const AssertStmtNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const StoreNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const StoreNode* op) {
   Doc doc;
   if (!is_one(op->predicate) || op->value.dtype().lanes() != 1) {
     doc << "tir.store(" << Print(op->buffer_var) << ", " << Print(op->index) << ", "
@@ -544,39 +614,18 @@ Doc TIRHybridPrinter::VisitStmt_(const StoreNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const BufferRealizeNode* op) {
-  Doc doc;
-  if (current_num_ != num_child_ - 1) {
-    doc << "with tir.realize(" << Print(op->buffer) << Print(op->bounds);
-    if (!is_one(op->condition)) {
-      doc << ", " << Print(op->condition);
-    }
-    doc << "):" << Doc::Indent(4, Doc::NewLine() << PrintBody(op->body));
-  } else {
-    doc << "tir.realize(" << Print(op->buffer) << Print(op->bounds);
-    if (!is_one(op->condition)) {
-      doc << ", " << Print(op->condition);
-    }
-    doc << ")" << Doc::NewLine() << PrintBody(op->body);
-  }
-  return doc;
+Doc TVMScriptPrinter::VisitStmt_(const BufferRealizeNode* op) {
+  LOG(FATAL)
+      << "TVM Script Printer Internal Error: All the BufferRealize should be folded with Attr";
+  return Doc();
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const AllocateNode* op) {
-  Doc doc;
-  if (current_num_ != num_child_ - 1) {
-    doc << "with tir.allocate(" << Print(op->buffer_var) << ", " << PrintDType(op->dtype) << ", "
-        << Print(op->extents) << "):";
-    doc << Doc::Indent(4, PrintBody(op->body));
-  } else {
-    doc << "tir.allocate(" << Print(op->buffer_var) << ", " << PrintDType(op->dtype) << ", "
-        << Print(op->extents) << ")";
-    doc << Doc::NewLine() << PrintBody(op->body);
-  }
-  return doc;
+Doc TVMScriptPrinter::VisitStmt_(const AllocateNode* op) {
+  LOG(FATAL) << "TVM Script Printer Internal Error: All the Allocate should be folded with Attr";
+  return Doc();
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const IfThenElseNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const IfThenElseNode* op) {
   Doc doc;
   doc << "if " << Print(op->condition) << ":";
   doc << Doc::Indent(4, Doc::NewLine() << PrintBody(op->then_case));
@@ -586,7 +635,7 @@ Doc TIRHybridPrinter::VisitStmt_(const IfThenElseNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const SeqStmtNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const SeqStmtNode* op) {
   std::vector<Doc> stmts;
   for (Stmt stmt : op->seq) {
     stmts.push_back(Print(stmt));
@@ -594,7 +643,7 @@ Doc TIRHybridPrinter::VisitStmt_(const SeqStmtNode* op) {
   return PrintSep(stmts, Doc::NewLine());
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const EvaluateNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const EvaluateNode* op) {
   Doc doc;
   doc << "tir.evaluate(" << Print(op->value) << ")";
   return doc;
@@ -615,37 +664,35 @@ inline const char* ForType2String(ForType t) {
   return "Unknown";
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const ForNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const ForNode* op) {
   Doc doc;
   var_not_in_headers.insert(op->loop_var.get());
-  doc << "for " << Print(op->loop_var) << " in tir.range(" << Print(op->min) << ", "
-      << Print(op->min + op->extent);
-  if (op->for_type != ForType::Serial) {
-    doc << ", " << Doc::StrLiteral(ForType2String(op->for_type));
-  }
-  doc << "):" << Doc::Indent(4, Doc::NewLine() << PrintBody(op->body));
+  doc << "for " << Print(op->loop_var)
+      << " in tir." + std::string(ForType2String(op->for_type)) + "(" << Print(op->min) << ", "
+      << Print(op->min + op->extent)
+      << "):" << Doc::Indent(4, Doc::NewLine() << PrintBody(op->body));
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const PrefetchNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const PrefetchNode* op) {
   Doc doc;
   doc << "tir.prefetch(" << Print(op->buffer) << ", " << Print(op->bounds) << ")";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitType_(const PrimTypeNode* node) {
+Doc TVMScriptPrinter::VisitType_(const PrimTypeNode* node) {
   Doc doc;
   doc << "ty." << runtime::DLDataType2String(node->dtype);
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitType_(const PointerTypeNode* node) {
+Doc TVMScriptPrinter::VisitType_(const PointerTypeNode* node) {
   Doc doc;
   doc << "ty.Ptr[" << Print(node->element_type) << "]";
   return doc;
 }
 
-Doc TIRHybridPrinter::VisitType_(const TupleTypeNode* node) {
+Doc TVMScriptPrinter::VisitType_(const TupleTypeNode* node) {
   if (node->fields.empty()) {
     return Doc::Text("None");
   } else {
@@ -657,13 +704,13 @@ Doc TIRHybridPrinter::VisitType_(const TupleTypeNode* node) {
   }
 }
 
-Doc TIRHybridPrinter::VisitStmt_(const BufferStoreNode* op) {
+Doc TVMScriptPrinter::VisitStmt_(const BufferStoreNode* op) {
   Doc doc;
   doc << Print(op->buffer) << Print(op->indices) << " = " << Print(op->value);
   return doc;
 }
 
-Doc TIRHybridPrinter::PrintBody(const Stmt& body) {
+Doc TVMScriptPrinter::PrintBody(const Stmt& body) {
   int memo_num_child, memo_current_num;
   std::swap(memo_num_child, num_child_);
   std::swap(memo_current_num, current_num_);
@@ -690,7 +737,7 @@ Doc TIRHybridPrinter::PrintBody(const Stmt& body) {
   return doc;
 }
 
-Doc TIRHybridPrinter::PrintIRModule(const IRModule& module) {
+Doc TVMScriptPrinter::PrintIRModule(const IRModule& module) {
   auto* op = module.operator->();
   Doc doc;
   doc << "class Module:";
@@ -704,13 +751,13 @@ Doc TIRHybridPrinter::PrintIRModule(const IRModule& module) {
       functions.push_back(Print((*it).second));
     }
   }
-  body << TIRHybridPrinter::PrintSep(functions, Doc::NewLine() << Doc::NewLine());
+  body << TVMScriptPrinter::PrintSep(functions, Doc::NewLine() << Doc::NewLine());
   body << Doc::NewLine() << DumpMeta();
   doc << Doc::Indent(4, body);
   return doc;
 }
 
-Doc TIRHybridPrinter::PrintPrimFunc(const PrimFunc& primFunc) {
+Doc TVMScriptPrinter::PrintPrimFunc(const PrimFunc& primFunc) {
   auto* op = primFunc.operator->();
   // clear renaming map
   memo_var_.clear();
@@ -734,7 +781,7 @@ Doc TIRHybridPrinter::PrintPrimFunc(const PrimFunc& primFunc) {
   // print buffer_bind
   for (const auto& it : op->buffer_map) {
     buf_not_in_headers.insert(it.second.get());
-    body << Print(it.second) << " = tir.buffer_bind(";
+    body << Print(it.second) << " = tir.match_buffer(";
     body << Print(it.first) << ", " << memo_buf_decl_[it.second];
     body << ")" << Doc::NewLine();
   }
@@ -785,8 +832,14 @@ Doc TIRHybridPrinter::PrintPrimFunc(const PrimFunc& primFunc) {
       vars.push_back(it.first.get());
     }
   }
-  if (!vars.empty()) {
+  if (!var_env_map_.empty()) {
     header_var << Doc::NewLine() << "# var definition";
+    for (const auto& it : var_env_map_) {
+      header_var << Doc::NewLine() << Print(it.first) << " = tir.env_thread("
+                 << Doc::StrLiteral(it.second) << ")";
+    }
+  }
+  if (!vars.empty()) {
     std::sort(vars.begin(), vars.end(), [&](const VarNode* a, const VarNode* b) {
       return memo_var_[GetRef<Var>(a)].str() < memo_var_[GetRef<Var>(b)].str();
     });
@@ -799,7 +852,7 @@ Doc TIRHybridPrinter::PrintPrimFunc(const PrimFunc& primFunc) {
   return doc;
 }
 
-Doc TIRHybridPrinter::PrintArray(const ArrayNode* op) {
+Doc TVMScriptPrinter::PrintArray(const ArrayNode* op) {
   Doc doc;
   doc << '[';
   for (size_t i = 0; i < op->size(); ++i) {
@@ -812,7 +865,7 @@ Doc TIRHybridPrinter::PrintArray(const ArrayNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::PrintIterVar(const IterVarNode* op) {
+Doc TVMScriptPrinter::PrintIterVar(const IterVarNode* op) {
   Doc doc;
   doc << "tir.iter_var(" << Print(op->var);
   if (op->dom.defined()) {
@@ -825,20 +878,20 @@ Doc TIRHybridPrinter::PrintIterVar(const IterVarNode* op) {
   return doc;
 }
 
-Doc TIRHybridPrinter::PrintRange(const RangeNode* op) {
+Doc TVMScriptPrinter::PrintRange(const RangeNode* op) {
   return Print(op->min) << ":" << Print(op->min + op->extent);
 }
 
-Doc TIRHybridPrinter::PrintBuffer(const BufferNode* op) {
+Doc TVMScriptPrinter::PrintBuffer(const BufferNode* op) {
   const Buffer& buffer = GetRef<Buffer>(op);
   return meta_.InMeta(buffer) ? meta_.GetMetaNode(buffer) : AllocBuf(buffer);
 }
 
-TVM_REGISTER_GLOBAL("tir.hybrid.AsHybrid")
+TVM_REGISTER_GLOBAL("script.AsTVMScript")
     .set_body_typed<std::string(const ObjectRef&, bool)>([](const ObjectRef& functions,
                                                             bool show_meta) {
       CHECK(functions.as<PrimFuncNode>() != nullptr || functions.as<IRModuleNode>() != nullptr);
-      return "@tvm.hybrid.script\n" + TIRHybridPrinter(show_meta).Print(functions).str() + "\n";
+      return "@tvm.script.tir\n" + TVMScriptPrinter(show_meta).Print(functions).str() + "\n";
     });
 
 }  // namespace tir

@@ -17,19 +17,19 @@
 # pylint: disable=import-self, invalid-name, unused-argument
 """Unit tests for various models and operators"""
 from time import time
+import os
 import sys
 from scipy.stats import t as tdistr
 import numpy as np
 import torch
+import torchvision
 from torch.nn import Module
 import tvm
-import torchvision
-
 from tvm import relay
 from tvm.contrib import graph_runtime
 from tvm.contrib.nvcc import have_fp16
 import tvm.testing
-
+from packaging import version as package_version
 
 sys.setrecursionlimit(10000)
 
@@ -1520,6 +1520,10 @@ def test_to():
         def forward(self, x):
             return x.double()
 
+    class ToFloat16(Module):
+        def forward(self, x):
+            return x.to(torch.float16)
+
     verify_model(ToCPU().eval(), torch.rand((1, 3, 32, 32)))
     verify_model(ToFloat().eval(), torch.zeros((1, 3, 32, 32), dtype=torch.int))
     verify_model(ToFloat().eval(), torch.tensor(2, dtype=torch.int))
@@ -1527,6 +1531,8 @@ def test_to():
     verify_model(ToInt().eval(), torch.tensor(0.8))
     verify_model(ToLong().eval(), torch.tensor(0.8))
     verify_model(ToDouble().eval(), torch.tensor(0.8))
+    verify_model(ToFloat16().eval(), torch.tensor(2, dtype=torch.float32))
+    verify_model(ToFloat16().eval(), torch.zeros((1, 3, 32, 32), dtype=torch.int))
 
 
 @tvm.testing.uses_gpu
@@ -2399,6 +2405,24 @@ def test_forward_clamp():
 
 
 @tvm.testing.uses_gpu
+def test_forward_clamp_():
+    torch.set_grad_enabled(False)
+
+    class ClampInPlace(Module):
+        def __init__(self, min, max):
+            super(ClampInPlace, self).__init__()
+            self.min = min
+            self.max = max
+
+        def forward(self, *args):
+            return torch.clamp_(args[0], self.min, self.max)
+
+    for ishape, min, max in (([4, 8], 0.1, 0.9), ([7, 6], 0.2, 0.5)):
+        input_data = torch.rand(ishape).float()
+        verify_model(ClampInPlace(min, max).float().eval(), input_data=input_data)
+
+
+@tvm.testing.uses_gpu
 def test_forward_ones():
     torch.set_grad_enabled(False)
 
@@ -2896,6 +2920,28 @@ def test_forward_addcmul():
 
 
 @tvm.testing.uses_gpu
+def test_forward_true_divide():
+    if package_version.parse(torch.__version__) < package_version.parse("1.5.0"):
+        return
+    torch.set_grad_enabled(False)
+
+    class TrueDivide(Module):
+        def forward(self, *args):
+            return torch.true_divide(args[0], args[1])
+
+    dividend = torch.rand([5, 3]).float()
+    # divisor could be either tensor or scalar
+    divisor_tensor = torch.rand([5, 3]).float() + 0.5
+    divisor_scalar = torch.tensor(1.0, dtype=torch.float32)
+    verify_model(
+        TrueDivide().float().eval(), input_data=[dividend, divisor_tensor], atol=1e-4, rtol=1e-4
+    )
+    verify_model(
+        TrueDivide().float().eval(), input_data=[dividend, divisor_scalar], atol=1e-4, rtol=1e-4
+    )
+
+
+@tvm.testing.uses_gpu
 def test_forward_traced_function():
     def fn(t1, t2):
         return t1 + t2
@@ -3247,6 +3293,43 @@ def test_forward_pretrained_bert_base_uncased():
     print("TVM   top-1 id: {}, token: {}".format(tvm_pred_idx, tvm_pred_token))
 
 
+def test_convert_torch_script_with_input_types():
+    def model_fn(x, y):
+        x = x.to(dtype=torch.int32)
+        y = x + y
+        return y
+
+    ishape = (4, 5)
+    input_x = torch.rand(ishape, dtype=torch.float32)
+    input_y = torch.randint(low=0, high=100, size=ishape, dtype=torch.int32)
+    inputs = [input_x, input_y]
+    script_module = torch.jit.trace(model_fn, inputs)
+
+    fname = "tmp.pt"
+    torch.jit.save(script_module, fname)
+    loaded = torch.jit.load(fname)
+    os.remove(fname)
+
+    verify_model(loaded.eval(), input_data=inputs)
+
+    def expected(x_shape, y_shape):
+        # use a fixed order of args so alpha equal check can pass
+        x = relay.var("x", shape=x_shape, dtype="float32")
+        y = relay.var("y", shape=y_shape, dtype="int32")
+        args = [x, y]
+        x1 = relay.cast(x, "int32")
+        y1 = relay.add(x1, y)
+        mod = tvm.IRModule.from_expr(relay.Function(args, y1))
+        return mod["main"]
+
+    input_infos = [("input0", (ishape, "float")), ("input1", (ishape, "int"))]
+    mod, params = relay.frontend.from_pytorch(loaded, input_infos)
+
+    expected_mod = expected(ishape, ishape)
+
+    assert tvm.ir.structural_equal(expected_mod, mod["main"], map_free_vars=True)
+
+
 if __name__ == "__main__":
     # some structural tests
     test_forward_traced_function()
@@ -3308,6 +3391,7 @@ if __name__ == "__main__":
     test_forward_where()
     test_forward_addcdiv()
     test_forward_addcmul()
+    test_forward_true_divide()
     test_forward_clone()
     test_forward_softplus()
     test_forward_softsign()
@@ -3323,6 +3407,7 @@ if __name__ == "__main__":
     test_forward_pow()
     test_forward_unary()
     test_forward_clamp()
+    test_forward_clamp_()
     test_forward_logical_not()
     test_forward_bitwise_not()
     test_forward_bitwise_xor()
@@ -3405,3 +3490,6 @@ if __name__ == "__main__":
 
     # Test bert model
     test_forward_pretrained_bert_base_uncased()
+
+    # Test convert torch script(jit) with specific inputs' types
+    test_convert_torch_script_with_input_types()

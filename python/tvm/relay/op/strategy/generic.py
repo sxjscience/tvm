@@ -256,6 +256,13 @@ def conv2d_strategy(attrs, inputs, out_type, target):
                 wrap_topi_schedule(topi.generic.schedule_group_conv2d_nchw),
                 name="group_conv2d_nchw.generic",
             )
+        elif layout == "NHWC":
+            assert kernel_layout == "HWIO"
+            strategy.add_implementation(
+                wrap_compute_conv2d(topi.nn.group_conv2d_nhwc, has_groups=True),
+                wrap_topi_schedule(topi.generic.schedule_group_conv2d_nhwc),
+                name="group_conv2d_nhwc.generic",
+            )
         else:
             raise RuntimeError("Unsupported group_conv2d layout {}".format(layout))
     return strategy
@@ -948,6 +955,8 @@ def wrap_compute_roi_align(topi_compute):
 def roi_align_strategy(attrs, inputs, out_type, target):
     """roi_align generic strategy"""
     strategy = _op.OpStrategy()
+    layout = attrs.layout
+    assert layout == "NCHW", "only support nchw for now"
     strategy.add_implementation(
         wrap_compute_roi_align(topi.vision.rcnn.roi_align_nchw),
         wrap_topi_schedule(topi.generic.schedule_roi_align),

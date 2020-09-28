@@ -19,74 +19,99 @@ import pytest
 
 import tvm
 from tvm import tir
-from tvm.hybrid import ty
-from tvm.hybrid.parser import HybridParserError
+from tvm.script import ty
+from tvm.script.parser import TVMScriptParserError
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module1:
     def buffer_bind_missing_args(a: ty.handle) -> None:
-        A = tir.buffer_bind((16, 16), "float32")
+        A = tir.match_buffer((16, 16), "float32")
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module2:
     def range_missing_args(a: ty.handle) -> None:
-        A = tir.buffer_bind(a, (16, 16), "float32")
+        A = tir.match_buffer(a, (16, 16), "float32")
 
         tir.attr(A, "realize_scope", "")
         tir.realize(A[0:16, 0:16])
-        for i in tir.range(16):
-            for j in tir.range(0, 16):
+        for i in tir.serial(16):
+            for j in tir.serial(0, 16):
                 A[i, j] = 0.0
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module3:
     def undefined_buffer(a: ty.handle) -> None:
-        A = tir.buffer_bind(a, (16, 16), "float32")
+        A = tir.match_buffer(a, (16, 16), "float32")
 
         tir.attr(A, "realize_scope", "")
         tir.realize(C[0:16, 0:16])
-        for i in tir.range(16):
-            for j in tir.range(0, 16):
+        for i in tir.serial(16):
+            for j in tir.serial(0, 16):
                 A[i, j] = 0.0
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module4:
     def unsupported_stmt(a: ty.int32) -> None:
         if a > 0:
             print("I love tvm")
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module5:
     def unsupported_function_call(a: ty.handle) -> None:
-        A = tir.buffer_bind(a, (16, 16), "float32")
+        A = tir.match_buffer(a, (16, 16), "float32")
 
         tir.attr(A, "realize_scope", "")
         tir.realize(A[0:16, 0:16])
         for i in tir.const_range(16):
-            for j in tir.range(0, 16):
+            for j in tir.serial(0, 16):
                 A[i, j] = 0.0
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module6:
     def missing_type_annotation(a) -> None:
         pass
 
 
-@tvm.hybrid.script
+@tvm.script.tir
 class Module7:
     def invalid_concise_scoping() -> None:
         tir.Assert(1.0 > 0.0, "aaaa")
         tir.evaluate(0.0)
 
 
+@tvm.script.tir
+class Module8:
+    def invalid_expr_stmt() -> None:
+        tir.max(1, 2)
+
+
+@tvm.script.tir
+class Module9:
+    def invalid_for_function(a: ty.handle) -> None:
+        A = tir.match_buffer(a, (16, 16), "float32")
+
+        for i in tir.evaluate(0.0):
+            for j in tir.serial(0, 16):
+                A[i, j] = 0.0
+
+
+@tvm.script.tir
+class Module10:
+    def invalid_block_function(a: ty.handle) -> None:
+        A = tir.match_buffer(a, (16, 16), "float32")
+
+        with tir.evaluate(0.0):
+            pass
+
+
 def wrap_error(module, lineno):
-    with pytest.raises(HybridParserError) as error:
+    with pytest.raises(TVMScriptParserError) as error:
         mod = module()
     assert error is not None
     e = error.value
@@ -103,3 +128,6 @@ if __name__ == "__main__":
     wrap_error(Module5, 70)
     wrap_error(Module6, 77)
     wrap_error(Module7, 84)
+    wrap_error(Module8, 91)
+    wrap_error(Module9, 99)
+    wrap_error(Module10, 109)

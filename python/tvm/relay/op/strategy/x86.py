@@ -174,6 +174,14 @@ def conv2d_strategy_cpu(attrs, inputs, out_type, target):
                 wrap_topi_schedule(topi.generic.schedule_group_conv2d_nchw),
                 name="group_conv2d_nchw.generic",
             )
+        elif layout == "NHWC":
+            assert kernel_layout == "HWIO"
+            logger.warning("group_conv2d is not optimized for x86.")
+            strategy.add_implementation(
+                wrap_compute_conv2d(topi.nn.group_conv2d_nhwc, has_groups=True),
+                wrap_topi_schedule(topi.generic.schedule_group_conv2d_nhwc),
+                name="group_conv2d_nhwc.generic",
+            )
         else:
             raise RuntimeError("Unsupported group_conv2d layout {}".format(layout))
     return strategy
@@ -380,6 +388,8 @@ def sparse_dense_strategy_cpu(attrs, inputs, out_type, target):
 def roi_align_strategy_cpu(attrs, inputs, out_type, target):
     """roi_align x86 strategy"""
     strategy = _op.OpStrategy()
+    layout = attrs.layout
+    assert layout == "NCHW", "only support nchw for now"
     strategy.add_implementation(
         wrap_compute_roi_align(topi.x86.roi_align_nchw),
         wrap_topi_schedule(topi.generic.schedule_roi_align),
