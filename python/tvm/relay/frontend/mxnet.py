@@ -833,6 +833,7 @@ def _mx_contrib_arange_like(inputs, attrs):
         raise tvm.error.OpAttributeUnimplemented(
             'Attribute "repeat" is not supported in operator arange_like.'
         )
+    print(inputs[0])
     ty = _infer_type(inputs[0]).checked_type
     assert ty
     shape, dtype = get_const_tuple(ty.shape), ty.dtype
