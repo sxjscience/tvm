@@ -2598,6 +2598,7 @@ _convert_map = {
     "_npi_concatenate": _mx_npi_concatenate,
     "_npx_reshape": _mx_npx_reshape,
     "_np_copy": _rename(_op.copy),
+    "_npi_copy": _rename(_op.copy),
     "_npi_power": _rename(_op.power),
     "_npi_power_scalar": _binop_scalar(_op.power),
     "_npi_multiply": _rename(_op.multiply),
