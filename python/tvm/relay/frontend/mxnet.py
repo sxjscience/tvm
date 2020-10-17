@@ -58,11 +58,6 @@ __all__ = ["from_mxnet"]
 _activation_map = {"sigmoid": _op.sigmoid, "tanh": _op.tanh, "relu": _op.nn.relu}
 
 
-def get_tuple_shape(shape_expr):
-    """Get the tuple shape from a shape expression"""
-    return tuple([ele.value for ele in shape_expr])
-
-
 def _mx_fully_connected(inputs, attrs):
     import mxnet as mx  # pylint: disable=import-outside-toplevel
 
@@ -630,21 +625,6 @@ def _mx_stack(inputs, attrs):
 def _mx_expand_dims(inputs, attrs):
     axis = attrs.get_int("axis")
     return _op.expand_dims(inputs[0], axis=axis)
-
-
-def _mx_where(inputs, attrs):
-    cond, lhs, rhs = inputs
-    cond_shape = get_tuple_shape(_infer_type(cond).checked_type.shape)
-    lhs_shape = get_tuple_shape(_infer_type(lhs).checked_type.shape)
-    rhs_shape = get_tuple_shape(_infer_type(rhs).checked_type.shape)
-    out_shape = np.broadcast(np.empty(cond_shape), np.empty(lhs_shape), np.empty(rhs_shape)).shape
-    if out_shape != cond_shape:
-        cond = _op.broadcast_to(cond, out_shape)
-    if out_shape != lhs_shape:
-        lhs = _op.broadcast_to(lhs, out_shape)
-    if out_shape != rhs_shape:
-        rhs = _op.broadcast_to(rhs, out_shape)
-    return _op.where(cond, lhs, rhs)
 
 
 def _mx_pad(inputs, attrs):
@@ -2284,16 +2264,6 @@ def _mx_broadcast_to(inputs, attrs):
     return _op.broadcast_to(data, tgt_shape)
 
 
-def _mx_broadcast_like(inputs, attrs):
-    assert len(inputs) == 2
-    for axes in ["lhs_axes", "rhs_axes"]:
-        if axes in attrs.attrs:
-            raise tvm.error.OpAttributeUnImplemented(
-                'Attribute "{}" is not supported for operator broadcast_like.'.format(axes)
-            )
-    return _op.broadcast_to_like(*inputs)
-
-
 def _mx_logical_not(inputs, input_types):
     data = inputs[0]
     dtype = _infer_type(data).checked_type.dtype
@@ -2332,7 +2302,7 @@ def _mx_npi_pad(inputs, attrs):
         raise tvm.error.OpAttributeRequired('Attribute "pad_width" not found in operator pad.')
     if None in pad_width:
         raise tvm.error.OpAttributeInvalid(
-            'Value None in attribute "pad_width" of operator Slice is not valid.'
+            'Value None in attribute "pad_width" of operator Pad is not valid.'
         )
     constant_values = attrs.get_float("constant_values", 0.0)
     padding = tuple(tuple((b, a)) for b, a in zip(pad_width[::2], pad_width[1::2]))
@@ -2354,26 +2324,74 @@ def _mx_npx_reshape(inputs, attrs):
     shape = attrs.get_int_tuple("newshape")
     reverse = attrs.get_bool("reverse", False)
     shape_list = list(shape)
-    new_shape_list = []
-    for num in shape_list:
-        if num > 0 or num == -1:
-            new_shape_list.append(num)
-        elif num == -2:
-            new_shape_list.append(0)
-        elif num == -3:
-            continue
-        elif num == -4:
-            new_shape_list.append(-2)
-        elif num == -5:
-            new_shape_list.append(-3)
-        elif num == -6:
-            new_shape_list.append(-4)
-        else:
-            raise tvm.error.OpAttributeInvalid("Shape dimension %d is not supported" % num)
-    shape = tuple(new_shape_list)
+    old_shape = get_const_tuple(_infer_type(inputs[0]).checked_type.shape)
+    new_shape = []
     if reverse:
-        return _op.reverse_reshape(inputs[0], newshape=shape)
-    return _op.reshape(inputs[0], newshape=shape)
+        old_shape = old_shape[::-1]
+        shape_list = shape_list[::-1]
+    ptr = 0
+    unknown_axis = None
+    src_ptr = 0
+    while src_ptr < len(shape_list):
+        ele = shape_list[src_ptr]
+        src_ptr += 1
+        if ele > 0:
+            new_shape.append(ele)
+            ptr += 1
+        elif ele == -1:
+            new_shape.append(-1)
+            if unknown_axis is not None:
+                raise tvm.error.OpAttributeInvalid("Can only have one -1 in the input shape.")
+            unknown_axis = len(new_shape)
+            ptr += 1
+        elif ele == -2:
+            new_shape.append(old_shape[ptr])
+            ptr += 1
+        elif ele == -3:
+            if old_shape[ptr] != 1:
+                raise tvm.error.OpAttributeInvalid(
+                    "Dimension of the original shape "
+                    "that corresponds to -3 must be 1. Received"
+                    " {}".format(old_shape[ptr])
+                )
+            ptr += 1
+        elif ele == -4:
+            new_shape += old_shape[ptr:]
+            break
+        elif ele == -5:
+            new_shape.append(old_shape[ptr] * old_shape[ptr + 1])
+            ptr += 2
+        elif ele == -6:
+            # Split axis
+            lhs = shape_list[src_ptr]
+            rhs = shape_list[src_ptr + 1]
+            src_ptr += 2
+            if lhs == -1 and rhs == -1:
+                raise tvm.error.OpAttributeInvalid("The lhs and rhs can not both be -1.")
+            if lhs == -1:
+                if old_shape[ptr] % rhs != 0:
+                    raise tvm.error.OpAttributeInvalid(
+                        "When splitting the axis, "
+                        "the dimension of the split axis must "
+                        "be divisible by the splitted values."
+                    )
+                lhs = old_shape[ptr] // rhs
+            if rhs == -1:
+                if old_shape[ptr] % lhs != 0:
+                    raise tvm.error.OpAttributeInvalid(
+                        "When splitting the axis, "
+                        "the dimension of the split axis must "
+                        "be divisible by the splitted values."
+                    )
+                rhs = old_shape[ptr] // lhs
+            new_shape.append(lhs)
+            new_shape.append(rhs)
+            ptr += 1
+        else:
+            raise tvm.error.OpAttributeInvalid("Shape dimension %d is not supported" % ele)
+    if reverse:
+        new_shape = new_shape[::-1]
+    return _op.reshape(inputs[0], newshape=new_shape)
 
 
 def _mx_split_v2(inputs, attrs):
@@ -2393,8 +2411,8 @@ def _mx_split_v2(inputs, attrs):
 def _mx_npi_where_rscalar(inputs, attrs):
     cond, dat = inputs
     scalar = attrs.get_float("scalar")
-    cond_shape = get_tuple_shape(_infer_type(cond).checked_type.shape)
-    dat_shape = get_tuple_shape(_infer_type(dat).checked_type.shape)
+    cond_shape = get_const_tuple(_infer_type(cond).checked_type.shape)
+    dat_shape = get_const_tuple(_infer_type(dat).checked_type.shape)
     dtype = _infer_type(dat).checked_type.dtype
     # Check for broadcasting
     out_shape = np.broadcast(np.empty(cond_shape), np.empty(dat_shape)).shape
@@ -2432,12 +2450,12 @@ _identity_list = [
     "sinh",
     "tan",
     "tanh",
+    "where",
 ]
 
 _convert_map = {
     "_copy": _rename(_op.copy),
     "relu": _rename(_op.nn.relu),
-    "where": _mx_where,
     "broadcast_add": _rename(_op.add),
     "broadcast_plus": _rename(_op.add),
     "broadcast_sub": _rename(_op.subtract),
@@ -2464,7 +2482,6 @@ _convert_map = {
     "broadcast_logical_and": _mx_broadcast_logical(_op.logical_and),
     "broadcast_logical_xor": _mx_broadcast_logical(_op.logical_xor),
     "broadcast_to": _mx_broadcast_to,
-    "broadcast_like": _mx_broadcast_like,
     "logical_not": _mx_logical_not,
     "_equal": _mx_compare(_op.equal, _rename),
     "_not_equal": _mx_compare(_op.not_equal, _rename),

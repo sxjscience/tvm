@@ -755,24 +755,6 @@ def test_forward_broadcast_to():
 
 
 @tvm.testing.uses_gpu
-def test_forward_broadcast_like():
-    def verify(input_shape, like_shape):
-        x_np = np.random.uniform(size=input_shape).astype("float32")
-        y_np = np.random.uniform(size=like_shape).astype("float32")
-        ref_res = mx.nd.broadcast_like(mx.nd.array(x_np), mx.nd.array(y_np))
-        mx_sym = mx.sym.broadcast_like(mx.sym.var("x"), mx.sym.var("y"))
-        mod, _ = relay.frontend.from_mxnet(mx_sym, {"x": input_shape, "y": like_shape})
-        for target, ctx in tvm.testing.enabled_targets():
-            for kind in ["graph", "debug"]:
-                intrp = relay.create_executor(kind, mod=mod, ctx=ctx, target=target)
-                op_res = intrp.evaluate()(x_np, y_np)
-                tvm.testing.assert_allclose(op_res.asnumpy(), ref_res.asnumpy())
-
-    verify((1, 2, 3), (3, 2, 3))
-    verify((4, 1, 32, 32), (4, 8, 32, 32))
-
-
-@tvm.testing.uses_gpu
 def test_forward_logical_not():
     a_shape = (3, 4, 5)
     dtype = "float32"
@@ -2029,9 +2011,12 @@ def test_forward_np_copy(data_shape, dtype, target, ctx, kind):
         ((2, 3, 8), (-2, -2, 2, -1), False),
         ((8, 3, 3, 3, 4, 4), (-6, 2, -1, -4), False),
         ((8, 3, 3, 3, 4, 4), (-5, -4), False),
+        ((1, 8, 3, 3, 3, 4, 4), (-3, -5, -4), False),
         ((8, 1, 3, 4), (-2, -3, -1), False),
         ((8, 3, 3, 3, 3, 8), (-4, -5), True),
         ((8, 3, 2, 4, 8), (-4, -1, 2, -6), True),
+        ((3, 2, 4, 8, 1, 1), (-4, -1, 2, -6, -5, -3), True),
+        ((2, 4, 1, 8), (-4, -3, -1, 2, -6), True),
     ],
 )
 def test_forward_npx_reshape(data_shape, out_shape, dtype, target, reverse, ctx, kind):
@@ -2118,17 +2103,18 @@ def test_forward_npi_tanh(data_shape, dtype, target, ctx, kind):
 
 
 @pytest.mark.skipif(not hasattr(mx.np, "where"), reason="mx.np.where hasn't been publish yet")
-@pytest.mark.parametrize("data_shape,cond_shape", [[(2, 2, 2), (2, 2, 2)],
-                                                   [(2, 7, 2), (7, 2)],
-                                                   [(1, 1, 8), (5, 1, 8)],
-                                                   [(2, 2), (1, 2)],
-                                                   [(1, 3), (3, 3)]])
+@pytest.mark.parametrize(
+    "data_shape,cond_shape",
+    [[(2, 2, 2), (2, 2, 2)], [(2, 7, 2), (7, 2)], [(2, 2), (1, 2)], [(1, 3), (3, 3)]],
+)
 @pytest.mark.parametrize("data_dtype", ["float64", "float32", "int64", "int32", "bool"])
 @pytest.mark.parametrize("cond_dtype", ["float64", "float32", "int64", "int32", "bool"])
 @pytest.mark.parametrize("scalar", [1.0, 2.0])
 @tvm.testing.parametrize_targets
 @pytest.mark.parametrize("kind", ["graph", "vm", "debug"])
-def test_forward_npi_where_rscalar(data_shape, cond_shape, data_dtype, cond_dtype, scalar, target, ctx, kind):
+def test_forward_npi_where_rscalar(
+    data_shape, cond_shape, data_dtype, cond_dtype, scalar, target, ctx, kind
+):
     if data_dtype == "bool":
         scalar = scalar == 0.0
     cond_np = np.random.uniform(size=cond_shape).astype(cond_dtype)
