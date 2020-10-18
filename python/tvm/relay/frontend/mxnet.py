@@ -2781,7 +2781,7 @@ def _from_mxnet_impl(symbol, shape_dict, dtype_info, params=None, mod=None):
             assert op_name in _convert_map
             op_params = _get_op_params(children, attrs, op_name, node, params)
             res = _convert_map[op_name](*op_params)
-            print(op_name, res)
+            print(op_name)
             try:
                 print(_infer_shape(res))
             except:
