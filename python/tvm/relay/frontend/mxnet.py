@@ -2781,10 +2781,11 @@ def _from_mxnet_impl(symbol, shape_dict, dtype_info, params=None, mod=None):
             assert op_name in _convert_map
             op_params = _get_op_params(children, attrs, op_name, node, params)
             res = _convert_map[op_name](*op_params)
-            if isinstance(res, tuple):
-                print(op_name, res, [_infer_shape(ele) for ele in res])
-            else:
-                print(op_name, res, _infer_shape(res))
+            print(op_name, res)
+            try:
+                print(_infer_shape(res))
+            except:
+                print([_infer_shape(res[i]) for i in range(len(res))])
             if res is None:
                 # defer conversion, used in RNN state initialization
                 res = [node]
